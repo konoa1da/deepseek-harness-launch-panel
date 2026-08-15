@@ -1,0 +1,6 @@
+# launch-panel bundle patch：向 web 组合挂载 launch-panel。
+# Node half 提供发射数据服务端代理（/launch-panel/launches，规避浏览器跨域/限流）；
+# client half 由 __ModuleLoader__ 内核挂载，渲染右侧可折叠面板。
+- insert:
+    - id: launch-panel
+      name: launch-panel

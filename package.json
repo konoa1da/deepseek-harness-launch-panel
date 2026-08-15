@@ -1,0 +1,45 @@
+{
+  "name": "launch-panel",
+  "version": "0.1.1",
+  "type": "module",
+  "description": "DSH Web GUI 右侧的火箭发射任务面板：近一月发射汇总 + 悬停详情，可折叠为左箭头",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "plugin",
+    "rocket",
+    "launch",
+    "panel",
+    "space"
+  ],
+  "author": "范孜豪 <fanzihao434@gmail.com>",
+  "scripts": {
+    "build:client": "node scripts/build-client.mjs",
+    "check:client": "node scripts/build-client.mjs --check"
+  },
+  "files": [
+    ".dsh-plugin",
+    "assets",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "devDependencies": {
+    "esbuild": "^0.28.1"
+  },
+  "main": "./.dsh-plugin/index.mjs",
+  "exports": {
+    ".": "./.dsh-plugin/index.mjs",
+    "./client": "./.dsh-plugin/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "license": "MIT"
+}

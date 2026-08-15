@@ -1,0 +1,1600 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="blue">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>火箭发射任务监测</title>
+<style>
+  /* ============ 基础变量 ============ */
+  :root {
+    --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI",
+                 "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei", "Helvetica Neue", sans-serif;
+    --font-mono: "SF Mono", "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+    --radius: 16px;
+    --radius-sm: 10px;
+    --ease: cubic-bezier(.22,.68,.28,1);
+    --dur: 200ms;
+    --sidebar-w: clamp(280px, 23vw, 360px);
+    --header-h: clamp(58px, 8vh, 70px);
+  }
+
+  /* ============ 蓝白主题（国内任务） ============ */
+  html[data-theme="blue"] {
+    --bg: #f3f6fc;
+    --bg-grad-1: #ffffff;
+    --bg-grad-2: #e4ebf9;
+    --text: #0b1a32;
+    --muted: #5c6b85;
+    --panel: rgba(255, 255, 255, 0.66);
+    --panel-border: rgba(11, 26, 50, 0.09);
+    --accent: #1d5fff;
+    --accent-2: #3f7cff;
+    --accent-ink: #ffffff;
+    --accent-soft: rgba(29, 95, 255, 0.10);
+    --hover: rgba(29, 95, 255, 0.12);
+    --shadow: 0 16px 48px rgba(23, 45, 90, 0.10);
+    --line: rgba(11, 26, 50, 0.09);
+    --pill: rgba(29, 95, 255, 0.09);
+    --live: #1d5fff;
+    --flame: #3f7cff;
+    --star: #a9c0ec;
+    --chip-domestic: rgba(29, 95, 255, 0.12);
+    --chip-foreign: rgba(11, 26, 50, 0.06);
+    --ground-shadow: 0.26;
+  }
+
+  /* ============ 黑白主题（国外任务） ============ */
+  html[data-theme="black"] {
+    --bg: #0a0b0e;
+    --bg-grad-1: #101216;
+    --bg-grad-2: #050608;
+    --text: #eef1f6;
+    --muted: #8a909b;
+    --panel: rgba(255, 255, 255, 0.045);
+    --panel-border: rgba(255, 255, 255, 0.10);
+    --accent: #f2f4f7;
+    --accent-2: #ffffff;
+    --accent-ink: #0a0b0e;
+    --accent-soft: rgba(255, 255, 255, 0.10);
+    --hover: rgba(255, 255, 255, 0.13);
+    --shadow: 0 18px 52px rgba(0, 0, 0, 0.55);
+    --line: rgba(255, 255, 255, 0.10);
+    --pill: rgba(255, 255, 255, 0.08);
+    --live: #ffffff;
+    --flame: #ffffff;
+    --star: #ffffff;
+    --chip-domestic: rgba(255, 255, 255, 0.14);
+    --chip-foreign: rgba(255, 255, 255, 0.08);
+    --ground-shadow: 0.14;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body { height: 100%; }
+
+  body {
+    font-family: var(--font-sans);
+    color: var(--text);
+    background: radial-gradient(120% 120% at 80% -10%, var(--bg-grad-1), var(--bg-grad-2));
+    display: grid;
+    grid-template-rows: var(--header-h) 1fr;
+    grid-template-columns: var(--sidebar-w) 1fr;
+    grid-template-areas:
+      "header header"
+      "sidebar main";
+    height: 100vh;
+    overflow: hidden;
+    transition: background 420ms var(--ease), color 420ms var(--ease);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* ============ 顶栏 ============ */
+  header {
+    grid-area: header;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 22px 0 26px;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+    z-index: 5;
+  }
+
+  .brand { display: flex; align-items: center; gap: 14px; }
+
+  .brand .logo {
+    width: 36px; height: 36px; border-radius: 11px;
+    display: grid; place-items: center;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: var(--accent-ink);
+    box-shadow: 0 6px 18px var(--accent-soft);
+  }
+  .brand .logo svg { width: 20px; height: 20px; }
+
+  .brand h1 { font-size: 17px; font-weight: 650; letter-spacing: .5px; }
+  .brand .sub { font-size: 12px; color: var(--muted); letter-spacing: 1.5px; margin-top: 2px; }
+
+  .header-right { display: flex; align-items: center; gap: 14px; }
+
+  .live-pill {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px; font-weight: 550; letter-spacing: 1px;
+    padding: 7px 13px; border-radius: 999px;
+    background: var(--pill); color: var(--muted);
+    transition: color var(--dur) var(--ease), background var(--dur) var(--ease);
+  }
+  .live-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--live);
+    animation: pulse 2.2s infinite;
+  }
+  .live-pill.offline .live-dot { background: #f5a623; animation: none; }
+  .live-pill.offline { color: var(--muted); }
+  @keyframes pulse {
+    0%   { box-shadow: 0 0 0 0 var(--accent); opacity: 1; }
+    70%  { box-shadow: 0 0 0 9px rgba(0,0,0,0); opacity: .55; }
+    100% { box-shadow: 0 0 0 0 rgba(0,0,0,0); opacity: 1; }
+  }
+
+  .theme-pill {
+    font-size: 12px; font-weight: 550; letter-spacing: .5px;
+    padding: 7px 13px; border-radius: 999px;
+    background: var(--pill); color: var(--muted);
+    white-space: nowrap; cursor: default;
+    transition: color var(--dur) var(--ease), background var(--dur) var(--ease), transform var(--dur) var(--ease);
+  }
+  .theme-pill:hover { transform: translateY(-1px); }
+
+  .refresh-btn {
+    width: 34px; height: 34px; border-radius: 10px;
+    border: 1px solid var(--panel-border);
+    background: var(--panel);
+    color: var(--muted);
+    cursor: pointer;
+    display: grid; place-items: center;
+    transition: color var(--dur) var(--ease), background var(--dur) var(--ease),
+                border-color var(--dur) var(--ease), transform var(--dur) var(--ease);
+  }
+  .refresh-btn:hover { background: var(--hover); color: var(--text); transform: rotate(120deg); }
+  .refresh-btn.spinning svg { animation: spin 0.9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .refresh-btn svg { width: 16px; height: 16px; }
+
+  /* ============ 左侧栏 ============ */
+  aside {
+    grid-area: sidebar;
+    border-right: 1px solid var(--line);
+    background: var(--panel);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    padding: 22px 18px 18px;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+    z-index: 3;
+  }
+
+  .side-head { padding: 0 6px 14px; border-bottom: 1px solid var(--line); }
+  .side-head .eyebrow {
+    font-size: 11px; letter-spacing: 2px; color: var(--muted); margin-bottom: 6px;
+  }
+  .side-head h2 { font-size: 15.5px; font-weight: 640; display: flex; align-items: baseline; gap: 8px; }
+  .side-head .count {
+    font-size: 11px; color: var(--muted); font-weight: 500;
+    background: var(--pill); padding: 2px 9px; border-radius: 999px;
+    letter-spacing: .5px;
+  }
+  .side-head .legend { font-size: 11px; color: var(--muted); margin-top: 5px; }
+
+  .side-scroll { overflow-y: auto; flex: 1; margin: 6px -8px 0; padding: 8px; min-height: 0; }
+  .side-scroll::-webkit-scrollbar { width: 8px; }
+  .side-scroll::-webkit-scrollbar-thumb { background: var(--panel-border); border-radius: 8px; }
+  .side-scroll::-webkit-scrollbar-thumb:hover { background: var(--hover); }
+
+  .side-section-label {
+    font-size: 11px; letter-spacing: 2px; color: var(--muted);
+    padding: 14px 6px 7px;
+  }
+
+  .launch-item {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px;
+    padding: 11px 12px;
+    margin-bottom: 4px;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    font-size: 13.5px;
+    cursor: pointer;
+    transition: background-color var(--dur) var(--ease), color var(--dur) var(--ease),
+                font-size var(--dur) var(--ease), transform var(--dur) var(--ease),
+                border-color var(--dur) var(--ease);
+  }
+  .launch-item:hover {
+    background-color: var(--hover);
+    border-color: var(--panel-border);
+    font-size: 14.3px;
+    transform: translateX(2px);
+  }
+  .launch-item:active { transform: translateX(2px) scale(.995); }
+
+  .li-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .li-flag {
+    font-size: 16px; line-height: 1; flex: 0 0 auto;
+    transition: transform var(--dur) var(--ease);
+  }
+  .launch-item:hover .li-flag { transform: scale(1.18); }
+  .li-name { min-width: 0; }
+  .li-rocket { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .li-rocket-en {
+    color: var(--muted); font-size: 11px; margin-top: 2px;
+    font-family: var(--font-mono); letter-spacing: .2px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  .li-right { text-align: right; flex: 0 0 auto; }
+  .li-date { font-family: var(--font-mono); font-size: 12.5px; font-weight: 550; letter-spacing: .3px; }
+  .li-code { font-size: 10px; color: var(--muted); letter-spacing: 1.5px; margin-top: 3px; font-weight: 600; }
+  .li-badge {
+    display: inline-block; margin-top: 4px; font-size: 10px; letter-spacing: 1px;
+    padding: 2px 8px; border-radius: 999px; font-weight: 600;
+    background: var(--chip-foreign); color: var(--muted);
+  }
+  .launch-item.domestic .li-badge { background: var(--chip-domestic); color: var(--accent); }
+  .launch-item.demo { opacity: .55; }
+  .launch-item.demo:hover { opacity: .82; }
+
+  .side-empty { color: var(--muted); font-size: 12.5px; padding: 20px 8px; line-height: 1.7; }
+
+  .side-foot {
+    padding: 12px 6px 2px; border-top: 1px solid var(--line);
+    font-size: 10.5px; color: var(--muted); letter-spacing: .4px;
+    display: flex; justify-content: space-between;
+  }
+
+  /* ============ 主体 ============ */
+  main { grid-area: main; position: relative; min-width: 0; min-height: 0; }
+
+  #scene {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    display: block; cursor: grab;
+  }
+  #scene:active { cursor: grabbing; }
+
+  .hint {
+    position: absolute; right: 20px; bottom: 18px;
+    font-size: 11.5px; color: var(--muted); letter-spacing: 1px;
+    background: var(--panel); border: 1px solid var(--panel-border);
+    padding: 8px 13px; border-radius: 999px;
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    pointer-events: none;
+    transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+  }
+
+  /* 悬停详情卡（鼠标移到侧栏发射任务时，在条目旁显示） */
+  .hover-card {
+    position: fixed;
+    z-index: 60;
+    width: 300px;
+    background: var(--panel-solid);
+    border: 1px solid var(--panel-border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 16px 18px 15px;
+    animation: hc-in 160ms var(--ease);
+  }
+  @keyframes hc-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  .hc-top { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
+  .hc-status {
+    font-size: 10.5px; font-weight: 650; letter-spacing: 1px;
+    padding: 3px 10px; border-radius: 999px;
+    background: var(--accent-soft); color: var(--accent);
+  }
+  .hc-tag {
+    font-size: 10px; font-weight: 600; letter-spacing: 1px;
+    padding: 3px 8px; border-radius: 999px;
+    background: var(--pill); color: var(--muted);
+  }
+  .hc-tag.demo { background: var(--chip-foreign); color: var(--muted); }
+  .hc-title { font-size: 16px; font-weight: 660; line-height: 1.35; margin-bottom: 2px; }
+  .hc-sub { font-size: 12.5px; color: var(--muted); margin-bottom: 12px; }
+  .hc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
+  .hc-cell { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .hc-k { font-size: 10px; letter-spacing: 2px; color: var(--muted); }
+  .hc-v { font-size: 12.5px; font-weight: 580; word-break: break-word; }
+  .hc-v.mono { font-family: var(--font-mono); font-size: 12px; }
+  .hc-utc { font-size: 10.5px; color: var(--muted); font-family: var(--font-mono); margin-top: 2px; }
+
+  /* 下次发射倒计时 */
+  .next-launch {
+    position: absolute; right: 20px; top: 20px;
+    text-align: right;
+    background: var(--panel); border: 1px solid var(--panel-border);
+    border-radius: var(--radius); padding: 14px 18px;
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+    cursor: default;
+  }
+  .next-launch .nl-k { font-size: 10px; letter-spacing: 2px; color: var(--muted); }
+  .next-launch .nl-name { font-size: 14px; font-weight: 640; margin-top: 6px; }
+  .next-launch .nl-count { font-family: var(--font-mono); font-size: 21px; font-weight: 600; letter-spacing: 1px; margin-top: 4px; }
+
+  /* 加载遮罩 */
+  .loading-bar {
+    position: absolute; top: 0; left: 0; height: 2px; width: 100%;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    background-size: 50% 100%;
+    animation: slide 1.2s linear infinite;
+    opacity: 0; pointer-events: none;
+    transition: opacity 200ms;
+  }
+  .loading-bar.on { opacity: 1; }
+  @keyframes slide { from { background-position: -100% 0; } to { background-position: 200% 0; } }
+
+  /* ============ 响应式缩放适配 ============ */
+  @media (max-width: 900px) {
+    body { grid-template-columns: 1fr; grid-template-rows: auto auto 1fr; grid-template-areas: "header" "sidebar" "main"; }
+    aside { border-right: none; border-bottom: 1px solid var(--line); max-height: 200px; }
+    .next-launch { right: 12px; top: 12px; padding: 10px 14px; }
+    .next-launch .nl-count { font-size: 17px; }
+    .hover-card { width: min(300px, calc(100vw - 24px)); }
+    .hint { display: none; }
+  }
+</style>
+</head>
+<body>
+
+  <!-- 顶栏 -->
+  <header>
+    <div class="brand">
+      <div class="logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2c3 2 4 5 4 8v3l2 4h-4"/>
+          <path d="M8 2c-3 2-4 5-4 8v3l-2 4h4"/>
+          <circle cx="12" cy="9" r="1.6" fill="currentColor" stroke="none"/>
+          <path d="M10 20h4"/>
+        </svg>
+      </div>
+      <div>
+        <h1>火箭发射任务监测</h1>
+        <div class="sub">国内外运载火箭发射动态 · 近实时监测</div>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <span class="live-pill"><span class="live-dot"></span><span id="liveText">实时连接中</span></span>
+      <span class="theme-pill" id="themePill" title="配色随最近一次发射任务所属国家自动切换">配色 · 国内 · 蓝白</span>
+      <button class="refresh-btn" id="refreshBtn" title="立即刷新">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- 左侧：近一月发射汇总 -->
+  <aside>
+    <div class="side-head">
+      <div class="eyebrow">发射日志 · 实时</div>
+      <h2>发射任务总览 <span class="count" id="logCount">—</span></h2>
+      <div class="legend">型号 · 发射日期（悬停查看详情）</div>
+    </div>
+
+    <div class="side-scroll" id="sideScroll">
+      <div class="side-section-label">即将发射</div>
+      <div id="upList"></div>
+      <div class="side-section-label">已发射 · 近 30 天</div>
+      <div id="pastList"></div>
+    </div>
+
+    <div class="side-foot">
+      <span id="updatedAt">最后更新 —</span>
+      <span>每 5 分钟自动刷新</span>
+    </div>
+  </aside>
+
+  <!-- 主体：3D 火箭 -->
+  <main>
+    <canvas id="scene"></canvas>
+    <div class="loading-bar" id="loadingBar"></div>
+
+    <div class="next-launch">
+      <div class="nl-k">下次发射倒计时</div>
+      <div class="nl-name" id="nlName">—</div>
+      <div class="nl-count" id="nlCount">T- --:--:--</div>
+    </div>
+
+    <div class="hint">🖱 拖拽旋转 · 滚轮缩放 · 单击切换自转</div>
+  </main>
+
+  <!-- 悬停详情卡（鼠标移到侧栏发射任务时，在条目旁显示） -->
+  <div class="hover-card" id="hoverCard" hidden></div>
+
+  <!-- Three.js 依赖 -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+  import * as THREE from 'three';
+  import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+  import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+  /* ============================================================
+   *  状态与常量
+   * ============================================================ */
+  const API_BASE = 'https://ll.thespacedevs.com/2.2.0/launch/';
+  const REFRESH_MS = 5 * 60 * 1000;           // 每 5 分钟自动刷新（留足 LL2 免费限流余量）
+  const MONTH_MS = 30 * 24 * 60 * 60 * 1000;  // 近一个月窗口
+  const CACHE_KEY = 'rocket-launch-cache-v1'; // 会话内缓存最近一次成功数据
+
+  const state = {
+    previous: [], upcoming: [], featured: null,
+    theme: 'blue', loading: false,
+    prevDemo: false, upDemo: false,   // 当前是否在使用离线演示数据
+    prevLive: false, upLive: false,   // 是否曾成功取得实时数据
+    failStreak: 0,                    // 连续失败次数（用于退避）
+    lastErrors: { past: [], upcoming: [] }, // 最近一次请求的错误诊断
+  };
+
+  // 国家代码 → 中文名 + 旗帜
+  const COUNTRY = {
+    CHN: { name: '中国', flag: '🇨🇳' }, USA: { name: '美国', flag: '🇺🇸' },
+    RUS: { name: '俄罗斯', flag: '🇷🇺' }, FRA: { name: '法国', flag: '🇫🇷' },
+    JPN: { name: '日本', flag: '🇯🇵' }, IND: { name: '印度', flag: '🇮🇳' },
+    KAZ: { name: '哈萨克斯坦', flag: '🇰🇿' }, IRN: { name: '伊朗', flag: '🇮🇷' },
+    ISR: { name: '以色列', flag: '🇮🇱' }, KOR: { name: '韩国', flag: '🇰🇷' },
+    NZL: { name: '新西兰', flag: '🇳🇿' }, GUF: { name: '法属圭亚那', flag: '🇬🇫' },
+    AUS: { name: '澳大利亚', flag: '🇦🇺' }, DEU: { name: '德国', flag: '🇩🇪' },
+    GBR: { name: '英国', flag: '🇬🇧' },
+  };
+
+  // 发射状态 → 中文
+  const STATUS_ZH = {
+    'launch successful': '发射成功', 'success': '发射成功',
+    'launch failure': '发射失败', 'failure': '发射失败',
+    'go for launch': '待发射', 'go': '待发射',
+    'in flight': '飞行中', 'to be determined': '待定', 'tbd': '待定',
+    'partial failure': '部分失败', 'launch was a partial failure': '部分失败',
+  };
+
+  // 火箭型号 → 中文名（键为去空格/标点后的小写）
+  const ROCKET_ZH = {
+    // 国际
+    'falcon9': '猎鹰九号', 'falcon9block5': '猎鹰九号', 'falconheavy': '猎鹰重型',
+    'starship': '星舰', 'starshipsuperheavy': '星舰 · 超重',
+    'soyuz21a': '联盟 2.1a', 'soyuz21b': '联盟 2.1b', 'soyuz2': '联盟二号', 'soyuz': '联盟号',
+    'electron': '电子号', 'atlasv': '宇宙神五号', 'deltaivheavy': '德尔塔四号重型',
+    'ariane5': '阿丽亚娜五号', 'ariane6': '阿丽亚娜六号', 'ariane62': '阿丽亚娜 62', 'ariane64': '阿丽亚娜 64',
+    'vulcancentaur': '火神半人马座', 'vulcan': '火神',
+    'newglenn': '新格伦', 'newshepard': '新谢泼德',
+    'protonm': '质子 M', 'proton': '质子号', 'angaraa5': '安加拉 A5', 'angara': '安加拉',
+    'vega': '织女星', 'vegac': '织女星 C',
+    'fireflyalpha': '萤火虫阿尔法', 'minotaur1': '米诺陶一号', 'minotauriv': '米诺陶四号',
+    'antares': '安塔瑞斯', 'antares230': '安塔瑞斯 230',
+    'gslv': 'GSLV', 'pslv': 'PSLV', 'lvm3': 'LVM3', 'h3': 'H3', 'h2a': 'H-IIA',
+    'epsilons': '艾普斯龙 S', 'epsilon': '艾普斯龙',
+    'launcherone': '发射者一号', 'astra': '阿斯特拉', 'terran1': '人族一号', 'miura1': '缪拉一号',
+    // 长征（显式覆盖常见型号，其余走通用转写，如 Long March 12 → 长征十二号）
+    'longmarch': '长征',
+    'longmarch2c': '长征二号丙', 'longmarch2d': '长征二号丁', 'longmarch2f': '长征二号F',
+    'longmarch3b': '长征三号乙', 'longmarch3be': '长征三号乙', 'longmarch3c': '长征三号丙',
+    'longmarch4b': '长征四号乙', 'longmarch4c': '长征四号丙',
+    'longmarch5': '长征五号', 'longmarch5b': '长征五号B',
+    'longmarch6': '长征六号', 'longmarch6a': '长征六号改', 'longmarch6c': '长征六号丙',
+    'longmarch7': '长征七号', 'longmarch7a': '长征七号甲', 'longmarch8': '长征八号',
+    'longmarch11': '长征十一号',
+    // 中国民营/商业火箭（使用规范汉字，不用拼音）
+    'zhuque': '朱雀', 'zhuque2': '朱雀二号', 'zhuque3': '朱雀三号', 'zq2': '朱雀二号', 'zq3': '朱雀三号',
+    'tianlong': '天龙', 'tianlong2': '天龙二号', 'tianlong3': '天龙三号',
+    'jielong1': '捷龙一号', 'jielong3': '捷龙三号', 'smartdragon1': '捷龙一号',
+    'kuaizhou1': '快舟一号', 'kuaizhou1a': '快舟一号甲', 'kuaizhou11': '快舟十一号',
+    'ceres1': '谷神星一号', 'ceres1s': '谷神星一号S', 'pallas1': '智神星一号',
+    'hyperbola1': '双曲线一号', 'hyperbola2': '双曲线二号', 'hyperbola3': '双曲线三号', 'sqx1': '双曲线一号',
+    'gravity1': '引力一号', 'gravity2': '引力二号',
+    'lijian1': '力箭一号', 'kinetica1': '力箭一号',
+    'nebula1': '星云一号', 'tianxing1': '天行一号', 'zhongke1a': '中科一号甲',
+  };
+
+  const DOM = {
+    liveText: document.getElementById('liveText'),
+    themePill: document.getElementById('themePill'),
+    refreshBtn: document.getElementById('refreshBtn'),
+    loadingBar: document.getElementById('loadingBar'),
+    logCount: document.getElementById('logCount'),
+    pastList: document.getElementById('pastList'),
+    upList: document.getElementById('upList'),
+    updatedAt: document.getElementById('updatedAt'),
+    nlName: document.getElementById('nlName'),
+    nlCount: document.getElementById('nlCount'),
+    hoverCard: document.getElementById('hoverCard'),
+    canvas: document.getElementById('scene'),
+  };
+
+  /* ============================================================
+   *  工具函数
+   * ============================================================ */
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  function launchCountry(l) {
+    return l?.pad?.location?.country_code || l?.pad?.country_code || '';
+  }
+  function rocketName(l) {
+    return l?.rocket?.configuration?.name ||
+           l?.rocket?.configuration?.full_name ||
+           l?.rocket?.name || '未知型号';
+  }
+  function rocketFull(l) {
+    return l?.rocket?.configuration?.full_name || rocketName(l);
+  }
+  function missionName(l) {
+    return l?.mission?.name || (l?.name?.includes('|') ? l.name.split('|')[1].trim() : l?.name) || '未公开任务';
+  }
+  function provider(l) { return l?.launch_service_provider?.name || ''; }
+  function siteName(l) { return l?.pad?.location?.name || l?.pad?.name || '未公开发射场'; }
+
+  // 发射场名称 → 中文（国内发射场翻译为规范中文名）
+  function siteZh(l) {
+    const raw = siteName(l);
+    if (!raw || raw === '未公开发射场') return raw;
+    if (/[\u4e00-\u9fff]/.test(raw)) return raw;         // 已是中文
+    const s = raw.toLowerCase();
+    const isChina = isDomestic(l) || /wenchang|jiuquan|xichang|taiyuan|hainan|haiyang|dongfang|yellow sea|bohai/.test(s);
+
+    let zh = '';
+    if (/wenchang/.test(s)) zh = '文昌航天发射场';
+    else if (/jiuquan/.test(s)) zh = '酒泉卫星发射中心';
+    else if (/xichang/.test(s)) zh = '西昌卫星发射中心';
+    else if (/taiyuan/.test(s)) zh = '太原卫星发射中心';
+    else if (/hainan commercial|hainan/.test(s)) zh = '海南商业航天发射场';
+    else if (/haiyang/.test(s)) zh = '海阳海上发射场';
+    else if (/dongfang spaceport/.test(s)) zh = '东方航天港';
+    else if (/yellow sea/.test(s)) zh = '黄海海上发射场';
+    else if (/bohai/.test(s)) zh = '渤海海上发射场';
+
+    if (zh) {
+      // 附带工位号（如 LC-101）
+      const pad = (l?.pad?.name || '').match(/lc[-\s]?\d+/i);
+      return zh + (pad ? ' · ' + pad[0].toUpperCase() : '');
+    }
+    if (!isChina) return raw;                             // 国外发射场保持原名
+
+    // 其余国内英文名做通用转换（卫星发射中心/发射场/发射中心等）
+    return raw
+      .replace(/people's republic of china|p\.r\. china|, china/gi, '')
+      .replace(/satellite launch center/gi, '卫星发射中心')
+      .replace(/spacecraft launch site|launch site/gi, '发射场')
+      .replace(/launch center/gi, '发射中心')
+      .replace(/,\s*/g, ' · ')
+      .replace(/\s{2,}/g, ' ')
+      .trim() || raw;
+  }
+  function statusName(l) { return l?.status?.name || '—'; }
+  function statusZh(l) {
+    const k = (statusName(l) || '').toLowerCase();
+    return STATUS_ZH[k] || statusName(l) || '—';
+  }
+
+  // 轨道名称 → 中文（避免界面出现英文轨道名）
+  function orbitZh(name) {
+    const k = String(name || '').toLowerCase();
+    const map = {
+      'low earth orbit': '近地轨道 (LEO)',
+      'medium earth orbit': '中地球轨道 (MEO)',
+      'geosynchronous orbit': '地球同步轨道 (GSO)',
+      'geostationary orbit': '地球静止轨道 (GEO)',
+      'geostationary transfer orbit': '地球同步转移轨道 (GTO)',
+      'sun-synchronous orbit': '太阳同步轨道 (SSO)',
+      'polar orbit': '极地轨道',
+      'high earth orbit': '高地球轨道 (HEO)',
+      'suborbital': '亚轨道',
+      'lunar transfer': '月球转移轨道',
+      'low lunar orbit': '近月轨道',
+      'lunar': '月球轨道',
+      'heliocentric orbit': '日心轨道',
+      'interplanetary': '行星际轨道',
+      'elliptical orbit': '椭圆轨道',
+    };
+    if (map[k]) return map[k];
+    return name || '';
+  }
+  function countryInfo(l) {
+    const code = launchCountry(l);
+    return COUNTRY[code] || { name: code || '未知', flag: '🌐' };
+  }
+  function isDomestic(l) { return launchCountry(l) === 'CHN'; }
+
+  function norm(s) { return String(s || '').toLowerCase().replace(/[\s\-–—/.]/g, ''); }
+
+  // 阿拉伯数字 → 中文数字（支持多位数：12 → 十二，21 → 二十一）
+  function cnNumber(n) {
+    const d = '零一二三四五六七八九';
+    n = Math.floor(n);
+    if (n < 0) return String(n);
+    if (n < 10) return d[n];
+    if (n < 20) return '十' + (n % 10 ? d[n % 10] : '');
+    const tens = Math.floor(n / 10), ones = n % 10;
+    return d[tens] + '十' + (ones ? d[ones] : '');
+  }
+
+  // 长征系列尾缀转写：5B → 五号B、12 → 十二号、2F → 二号F
+  function longMarchZh(tail) {
+    const m = String(tail).match(/^(\d+)(.*)$/);
+    if (!m) return '';
+    return '长征' + cnNumber(parseInt(m[1], 10)) + '号' + m[2].toUpperCase();
+  }
+
+  function rocketZh(name) {
+    if (!name) return '';
+    if (/[\u4e00-\u9fff]/.test(name)) return name; // 已是中文
+    let k = norm(name);
+    k = k.replace(/^cz(\d)/, 'longmarch$1');       // CZ-3B / CZ-12 等视同 Long March
+    if (ROCKET_ZH[k]) return ROCKET_ZH[k];
+    const m = k.match(/^longmarch(.+)$/);
+    if (m) return longMarchZh(m[1]);
+    return '';
+  }
+
+  // 火箭双语文本：中文 · English（无中文则仅英文）
+  function rocketBilingual(l) {
+    const en = rocketName(l);
+    const zh = rocketZh(en);
+    return (zh && zh !== en) ? `${zh} · ${en}` : en;
+  }
+
+  function pad2(n) { return String(n).padStart(2, '0'); }
+  const TZ_BJ = 8 * 3600 * 1000;         // 北京时间 = UTC + 8
+  const bjDate = (iso) => new Date(new Date(iso).getTime() + TZ_BJ);
+
+  // 侧栏日期（北京时间）
+  function fmtMD(iso) {
+    if (!iso) return '--';
+    const d = bjDate(iso);
+    return `${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
+  }
+  function fmtHHMM(iso) {
+    if (!iso) return '--:--';
+    const d = bjDate(iso);
+    return `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}`;
+  }
+  // 详情卡发射时间（北京时间为主）
+  function fmtDateTime(iso) {
+    if (!iso) return '—';
+    const d = bjDate(iso);
+    return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())} ${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())} 北京时间`;
+  }
+  // 对应的 UTC 时间（详情卡次要显示）
+  function fmtDateTimeUTC(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())} ${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())} UTC`;
+  }
+
+  /* ============================================================
+   *  3D 场景
+   * ============================================================ */
+  const canvas = DOM.canvas;
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.08;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
+  camera.position.set(1.1, 1.8, 12.4);
+
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.target.set(0, 1.3, 0);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.06;
+  controls.enablePan = false;
+  controls.minDistance = 6.5;
+  controls.maxDistance = 21;
+  controls.minPolarAngle = 0.22;
+  controls.maxPolarAngle = Math.PI * 0.6;
+  controls.autoRotate = true;
+  controls.autoRotateSpeed = 0.7;
+
+  // 环境反射（让金属/清漆材质有真实高光）
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  pmrem.dispose();
+
+  // 灯光：主光（投影）+ 补光 + 主题色轮廓光 + 引擎光
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x2a3342, 0.55);
+  const key = new THREE.DirectionalLight(0xffffff, 2.2);
+  key.position.set(5, 7, 6);
+  key.castShadow = true;
+  key.shadow.mapSize.set(1024, 1024);
+  key.shadow.camera.left = -6; key.shadow.camera.right = 6;
+  key.shadow.camera.top = 7; key.shadow.camera.bottom = -6;
+  key.shadow.camera.near = 1; key.shadow.camera.far = 24;
+  key.shadow.bias = -0.0002;
+  key.shadow.normalBias = 0.02;
+  const fill = new THREE.DirectionalLight(0xffffff, 0.6);
+  fill.position.set(-4, -1, 3);
+  const rim = new THREE.DirectionalLight(0x2f6dff, 1.1);
+  rim.position.set(-5, 2.5, -4);
+  const engineLight = new THREE.PointLight(0x3f7cff, 0, 9, 4);
+  engineLight.position.set(0, -2.4, 0);
+  scene.add(hemi, key, fill, rim, engineLight);
+
+  // 地面接触阴影（透明画布上用 ShadowMaterial 只显示投影）
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(50, 50),
+    new THREE.ShadowMaterial({ opacity: 0.26 })
+  );
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.y = -4.6;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  // —— 宇宙星空特效：闪烁星海 + 星云 + 流星 ——
+  function makeGlowTexture() {
+    const c = document.createElement('canvas');
+    c.width = c.height = 128;
+    const g = c.getContext('2d');
+    const grd = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+    grd.addColorStop(0, 'rgba(255,255,255,0.9)');
+    grd.addColorStop(0.35, 'rgba(255,255,255,0.3)');
+    grd.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grd; g.fillRect(0, 0, 128, 128);
+    return new THREE.CanvasTexture(c);
+  }
+  const glowTex = makeGlowTexture();
+
+  // 闪烁星海（Shader 逐星独立闪烁）
+  const STAR_N = 900;
+  const starGeo = new THREE.BufferGeometry();
+  const starPosA = new Float32Array(STAR_N * 3);
+  const starPhase = new Float32Array(STAR_N);
+  const starSize = new Float32Array(STAR_N);
+  for (let i = 0; i < STAR_N; i++) {
+    const r = 14 + Math.random() * 12;
+    const th = Math.random() * Math.PI * 2;
+    const ph = Math.acos(2 * Math.random() - 1);
+    starPosA[i * 3]     = r * Math.sin(ph) * Math.cos(th);
+    starPosA[i * 3 + 1] = r * Math.sin(ph) * Math.sin(th);
+    starPosA[i * 3 + 2] = r * Math.cos(ph);
+    starPhase[i] = Math.random() * Math.PI * 2;
+    starSize[i] = 0.6 + Math.random() * 1.8;
+  }
+  starGeo.setAttribute('position', new THREE.BufferAttribute(starPosA, 3));
+  starGeo.setAttribute('aPhase', new THREE.BufferAttribute(starPhase, 1));
+  starGeo.setAttribute('aSize', new THREE.BufferAttribute(starSize, 1));
+  const starUniforms = {
+    uTime: { value: 0 },
+    uColor: { value: new THREE.Color(0xa9c0ec) },
+  };
+  const starMat = new THREE.ShaderMaterial({
+    uniforms: starUniforms,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    vertexShader: `
+      uniform float uTime;
+      attribute float aPhase;
+      attribute float aSize;
+      varying float vA;
+      void main() {
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        float tw = 0.55 + 0.45 * sin(uTime * (1.1 + aPhase * 4.0) + aPhase * 37.0);
+        vA = tw;
+        gl_PointSize = clamp(aSize * (70.0 / -mv.z) * (0.55 + 0.6 * tw), 0.5, 7.0);
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      uniform vec3 uColor;
+      varying float vA;
+      void main() {
+        vec2 c = gl_PointCoord - 0.5;
+        float a = smoothstep(0.5, 0.06, length(c));
+        gl_FragColor = vec4(uColor, a * vA);
+      }`,
+  });
+  const starField = new THREE.Points(starGeo, starMat);
+  scene.add(starField);
+
+  // 星云光斑
+  const NEB_COLORS_BLUE = [0x1d5fff, 0x7fb0ff, 0x9fd0ff];
+  const NEB_COLORS_BLACK = [0xffffff, 0xb9c2d0, 0x8a93a0];
+  const nebulas = [];
+  for (let i = 0; i < 3; i++) {
+    const m = new THREE.SpriteMaterial({
+      map: glowTex, color: NEB_COLORS_BLUE[i], transparent: true, opacity: 0.16,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    const s = new THREE.Sprite(m);
+    const a = (i / 3) * Math.PI * 2 + 0.7;
+    const rad = 15 + i * 2.5;
+    s.position.set(Math.cos(a) * rad, 2.5 - i * 1.6, Math.sin(a) * rad);
+    const sc = 11 - i * 2;
+    s.scale.set(sc, sc, 1);
+    nebulas.push(s);
+    scene.add(s);
+  }
+
+  // 流星（周期性划过长空）
+  const shooters = [];
+  for (let i = 0; i < 4; i++) {
+    const g = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(0, 0, 0), new THREE.Vector3(1.7, 0, 0),
+    ]);
+    const m = new THREE.LineBasicMaterial({
+      color: 0xffffff, transparent: true, opacity: 0,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    const line = new THREE.Line(g, m);
+    line.visible = false;
+    scene.add(line);
+    shooters.push({
+      line, active: false, t: 0, dur: 0.9,
+      delay: 1.5 + i * 6 + Math.random() * 9,
+      pos: new THREE.Vector3(), dir: new THREE.Vector3(), quat: new THREE.Quaternion(),
+    });
+  }
+  function launchShooter(s) {
+    const R = 11;
+    const th = Math.random() * Math.PI * 2;
+    const y = 2 + Math.random() * 6;
+    s.pos.set(Math.cos(th) * R, y, Math.sin(th) * R);
+    const target = new THREE.Vector3((Math.random() - 0.5) * 5, 0.5 + Math.random() * 3, (Math.random() - 0.5) * 5);
+    s.dir.copy(target).sub(s.pos).normalize();
+    s.quat.setFromUnitVectors(new THREE.Vector3(1, 0, 0), s.dir);
+    s.line.quaternion.copy(s.quat);
+    s.line.visible = true;
+    s.active = true;
+    s.t = 0;
+  }
+
+  // 火箭根节点
+  const rocketGroup = new THREE.Group();
+  scene.add(rocketGroup);
+  let flameOuter = null, flameInner = null;
+
+  /* ---------- 建模辅助 ---------- */
+  function latheFrom(points, seg = 48) {
+    const g = new THREE.LatheGeometry(points.map(([x, y]) => new THREE.Vector2(x, y)), seg);
+    g.computeVertexNormals();
+    return g;
+  }
+  function ogiveProfile(r0, h, n = 30) {
+    const pts = [];
+    for (let i = 0; i <= n; i++) {
+      const t = i / n;
+      pts.push([r0 * Math.pow(1 - t, 0.62), t * h]);
+    }
+    return pts;
+  }
+  function engineBellGeo(r) {
+    const pts = [];
+    for (let i = 0; i <= 16; i++) {
+      const t = i / 16;
+      pts.push([r * (0.55 + 0.45 * Math.pow(t, 0.55)), -t * 0.46]);
+    }
+    return latheFrom(pts, 26);
+  }
+  function finGeo() {
+    const s = new THREE.Shape();
+    s.moveTo(0.02, -0.82);
+    s.lineTo(0.66, -0.60);
+    s.lineTo(0.66, -0.16);
+    s.lineTo(0.40, 0.30);
+    s.lineTo(0.02, 0.68);
+    s.closePath();
+    const g = new THREE.ExtrudeGeometry(s, {
+      depth: 0.05, bevelEnabled: true,
+      bevelThickness: 0.02, bevelSize: 0.02, bevelSegments: 2, steps: 1,
+    });
+    g.translate(0, 0, -0.025);
+    return g;
+  }
+  // 程序化蒙皮纹理（面板接缝 + 铆钉），用作凹凸贴图
+  function makePanelTexture() {
+    const c = document.createElement('canvas');
+    c.width = 256; c.height = 1024;
+    const g = c.getContext('2d');
+    g.fillStyle = '#ffffff'; g.fillRect(0, 0, 256, 1024);
+    g.strokeStyle = 'rgba(0,0,0,0.18)'; g.lineWidth = 1;
+    const xs = [0, 64, 128, 192, 255];
+    const ys = [0, 128, 256, 384, 512, 640, 768, 896, 1023];
+    for (const y of ys) { g.beginPath(); g.moveTo(0, y); g.lineTo(256, y); g.stroke(); }
+    for (const x of xs) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, 1024); g.stroke(); }
+    g.fillStyle = 'rgba(0,0,0,0.22)';
+    for (let y = 64; y < 1024; y += 128) for (const x of [64, 128, 192]) {
+      g.beginPath(); g.arc(x, y, 1.6, 0, Math.PI * 2); g.fill();
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(2, 6);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  }
+  const panelBump = makePanelTexture();
+
+  // 是否捆绑助推器
+  function hasBoosters(l) {
+    const s = (rocketName(l) + ' ' + rocketFull(l) + ' ' + (l?.rocket?.configuration?.family || '')).toLowerCase();
+    return /heavy|5b|starship|super heavy|soyuz|ariane 5|atlas v|delta iv|new glenn|vulcan|angara|long march 5|long march 7|长征五号|长征七号/.test(s);
+  }
+  function isFalcon(l) { return /falcon/i.test((l?.rocket?.configuration?.family || '') + ' ' + rocketName(l)); }
+  function isStarship(l) { return /starship/i.test((l?.rocket?.configuration?.family || '') + ' ' + rocketName(l)); }
+  function hasFins(l) { return !isFalcon(l) && !isStarship(l); }
+  function engineArrangement(l) {
+    const n = (rocketName(l) + ' ' + (l?.rocket?.configuration?.family || '')).toLowerCase();
+    if (/starship/.test(n)) return { count: 12, center: false, r: 0.34, size: 0.13 };
+    if (/falcon|electron/.test(n)) return { count: 9, center: true, r: 0.3, size: 0.14 };
+    if (/soyuz/.test(n)) return { count: 5, center: true, r: 0.26, size: 0.15 };
+    if (/long march/.test(n)) return { count: 4, center: false, r: 0.24, size: 0.16 };
+    return { count: 1, center: false, r: 0, size: 0.34 };
+  }
+
+  /* ---------- 建模 ---------- */
+  function buildRocket(l) {
+    while (rocketGroup.children.length) rocketGroup.remove(rocketGroup.children[0]);
+
+    const theme = state.theme;
+    const accentHex = theme === 'blue' ? 0x2f6dff : 0xe8ebf1;
+    const accentSoftHex = theme === 'blue' ? 0x4d82ff : 0xffffff;
+
+    // 家族涂装（按真实火箭定基色）
+    const n = rocketName(l).toLowerCase();
+    let bodyColor = 0xf4f6fa, bodyMetal = 0.12, bodyRough = 0.34;
+    if (isStarship(l)) { bodyColor = 0xc3c7cf; bodyMetal = 0.9; bodyRough = 0.26; }
+    else if (/electron/.test(n)) { bodyColor = 0x1a1d22; bodyMetal = 0.5; bodyRough = 0.42; }
+    else if (/long march/.test(n)) { bodyColor = 0xf7f8fb; }
+
+    const matBody = new THREE.MeshPhysicalMaterial({
+      color: bodyColor, metalness: bodyMetal, roughness: bodyRough,
+      clearcoat: 0.65, clearcoatRoughness: 0.22, bumpMap: panelBump, bumpScale: 0.5,
+    });
+    const matDark = new THREE.MeshStandardMaterial({ color: 0x14161b, metalness: 0.85, roughness: 0.42 });
+    const matAccent = new THREE.MeshPhysicalMaterial({
+      color: accentHex, metalness: 0.4, roughness: 0.32, clearcoat: 0.5, clearcoatRoughness: 0.3,
+    });
+    const matRed = new THREE.MeshStandardMaterial({ color: 0xc62828, metalness: 0.4, roughness: 0.4 });
+
+    const R = 0.8;                 // 一级箭体半径
+    const r2 = 0.66;               // 二级箭体半径（更细）
+    const add = (m) => rocketGroup.add(m);
+
+    // —— 一子级箭体（长圆柱 + 蒙皮纹理）——
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(R, R, 3.2, 64), matBody);
+    body.position.y = 0.3;         // 跨度 -1.3 .. 1.9
+    body.castShadow = true;
+    add(body);
+
+    // —— 尾段船体（深色收窄）——
+    const boatPts = [];
+    for (let i = 0; i <= 20; i++) {
+      const t = i / 20;
+      boatPts.push([R - 0.25 * Math.pow(t, 1.5), -1.3 - t * 0.68]);
+    }
+    const boat = new THREE.Mesh(latheFrom(boatPts), matDark);
+    add(boat);
+
+    // —— 一级发动机喷管群 ——
+    const arr = engineArrangement(l);
+    const bellGeo = engineBellGeo(arr.size);
+    const bells = [];
+    if (arr.count === 1) bells.push([0, 0]);
+    else {
+      const ringN = arr.center ? arr.count - 1 : arr.count;
+      for (let i = 0; i < ringN; i++) {
+        const a = (i / ringN) * Math.PI * 2;
+        bells.push([Math.cos(a) * arr.r, Math.sin(a) * arr.r]);
+      }
+      if (arr.center) bells.push([0, 0]);
+    }
+    for (const [bx, bz] of bells) {
+      const bell = new THREE.Mesh(bellGeo, matDark);
+      bell.position.set(bx, -1.95, bz);
+      add(bell);
+    }
+
+    // —— 开放级间段：4 根桁架连杆 + 可见的二级发动机 ——
+    const gapTop = 1.9, gapBot = 2.3;      // 级间空隙（一级顶 → 二级底）
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2;
+      const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, gapBot - gapTop, 8), matDark);
+      strut.position.set(Math.cos(a) * 0.72, (gapTop + gapBot) / 2, Math.sin(a) * 0.72);
+      add(strut);
+    }
+    const secBell = new THREE.Mesh(engineBellGeo(0.22), matDark);
+    secBell.position.y = gapBot;           // 二级发动机喷管，挂在级间空隙内
+    add(secBell);
+
+    // —— 二子级箭体（更细、更短）——
+    const stage2 = new THREE.Mesh(new THREE.CylinderGeometry(r2, r2, 1.55, 64), matBody);
+    stage2.position.y = gapBot + 0.775;    // 跨度 2.3 .. 3.85
+    stage2.castShadow = true;
+    add(stage2);
+
+    // —— 整流罩（二级上方尖拱形）——
+    const nose = new THREE.Mesh(latheFrom(ogiveProfile(r2, 1.75)), matBody);
+    nose.position.y = gapBot + 1.55;       // 底 3.85，顶 5.6
+    nose.castShadow = true;
+    add(nose);
+
+    // —— 主题色装饰环（一级 + 二级各一）——
+    const ring1 = new THREE.Mesh(new THREE.CylinderGeometry(R * 1.005, R * 1.005, 0.06, 64), matAccent);
+    ring1.position.y = 0.55;
+    add(ring1);
+    const ring2 = new THREE.Mesh(new THREE.CylinderGeometry(r2 * 1.01, r2 * 1.01, 0.05, 64), matAccent);
+    ring2.position.y = gapBot + 0.95;
+    add(ring2);
+
+    // 长征系列红色细环（一级）
+    if (/long march|长征/.test((rocketFull(l) || '') + ' ' + (l?.rocket?.configuration?.family || ''))) {
+      const red = new THREE.Mesh(new THREE.CylinderGeometry(R * 1.002, R * 1.002, 0.04, 64), matRed);
+      red.position.y = 0.12;
+      add(red);
+    }
+
+    // —— 尾翼（除 Falcon/Starship 外，装在一级底部）——
+    if (hasFins(l)) {
+      const fg = finGeo();
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2;
+        const fin = new THREE.Mesh(fg, matAccent);
+        fin.position.set(Math.cos(a) * (R - 0.02), -1.05, Math.sin(a) * (R - 0.02));
+        fin.rotation.y = a;
+        fin.castShadow = true;
+        add(fin);
+      }
+    }
+
+    // —— Falcon：栅格舵（一级顶部）+ 回收支腿 ——
+    if (isFalcon(l)) {
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2;
+        const grid = new THREE.Group();
+        for (let k = 0; k < 4; k++) {
+          const bar = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.03, 0.035), matDark);
+          bar.position.y = k * 0.1 - 0.15;
+          grid.add(bar);
+        }
+        grid.position.set(Math.cos(a) * (R + 0.24), 1.55, Math.sin(a) * (R + 0.24));
+        grid.rotation.y = a;
+        add(grid);
+
+        const leg = new THREE.Mesh(new THREE.BoxGeometry(0.09, 1.3, 0.09), matDark);
+        leg.position.set(Math.cos(a) * (R - 0.06), -0.3, Math.sin(a) * (R - 0.06));
+        leg.rotation.z = (Math.cos(a) >= 0 ? 1 : -1) * 0.12;
+        leg.rotation.x = (Math.sin(a) >= 0 ? 1 : -1) * 0.12;
+        add(leg);
+      }
+    }
+
+    // —— 助推器（重型/捆绑构型，匹配一级高度）——
+    if (hasBoosters(l)) {
+      const bNose = latheFrom(ogiveProfile(0.3, 0.7));
+      const bBody = new THREE.CylinderGeometry(0.3, 0.3, 2.9, 40);
+      const bBell = engineBellGeo(0.16);
+      for (const side of [-1, 1]) {
+        const bx = side * 1.08;
+        const booster = new THREE.Group();
+        const b0 = new THREE.Mesh(bBody, matBody); b0.position.y = 0.15; b0.castShadow = true; booster.add(b0);
+        const b1 = new THREE.Mesh(bNose, matAccent); b1.position.y = 1.6; booster.add(b1);
+        const b2 = new THREE.Mesh(bBell, matDark); b2.position.y = -1.35; booster.add(b2);
+        booster.position.set(bx, 0, 0);
+        add(booster);
+      }
+    }
+
+    // —— 尾焰 ——
+    const outerGeo = new THREE.ConeGeometry(0.36, 1.9, 32, 1, true);
+    const outerMat = new THREE.MeshBasicMaterial({
+      color: accentSoftHex, transparent: true, opacity: 0.55,
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+    });
+    flameOuter = new THREE.Mesh(outerGeo, outerMat);
+    flameOuter.rotation.x = Math.PI;
+    flameOuter.position.y = -2.35;
+    flameOuter.name = 'flameOuter';
+
+    const innerGeo = new THREE.ConeGeometry(0.17, 1.2, 32, 1, true);
+    const innerMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff, transparent: true, opacity: 0.85,
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+    });
+    flameInner = new THREE.Mesh(innerGeo, innerMat);
+    flameInner.rotation.x = Math.PI;
+    flameInner.position.y = -2.05;
+    flameInner.name = 'flameInner';
+
+    add(flameOuter); add(flameInner);
+
+    updateSceneTheme();
+  }
+
+  function updateSceneTheme() {
+    const theme = state.theme;
+    rim.color.setHex(theme === 'blue' ? 0x2f6dff : 0xffffff);
+    rim.intensity = theme === 'blue' ? 1.1 : 0.65;
+    engineLight.color.setHex(theme === 'blue' ? 0x3f7cff : 0xffffff);
+    starUniforms.uColor.value.setHex(theme === 'blue' ? 0xa9c0ec : 0xffffff);
+    const nb = theme === 'blue' ? NEB_COLORS_BLUE : NEB_COLORS_BLACK;
+    nebulas.forEach((s, i) => { s.material.color.setHex(nb[i]); });
+    ground.material.opacity = theme === 'blue' ? 0.26 : 0.14;
+    if (flameOuter) flameOuter.material.color.setHex(theme === 'blue' ? 0x4d82ff : 0xffffff);
+  }
+
+  /* ============================================================
+   *  主题切换
+   * ============================================================ */
+  function applyTheme(theme) {
+    state.theme = theme;
+    document.documentElement.dataset.theme = theme;
+    const domestic = isDomestic(state.featured);
+    DOM.themePill.textContent = domestic ? '配色 · 国内 · 蓝白' : '配色 · 海外 · 黑白';
+    DOM.themePill.title = domestic
+      ? '最近一次发射任务来自中国，启用蓝白配色'
+      : '最近一次发射任务来自海外，启用黑白配色';
+    updateSceneTheme();
+  }
+
+  /* ============================================================
+   *  DOM 渲染
+   * ============================================================ */
+  function launchItemHTML(l, mode, demo = false, idx = 0) {
+    const ci = countryInfo(l);
+    const domestic = isDomestic(l);
+    const isUp = mode === 'up';
+    const date = isUp ? `${fmtMD(l.net)} ${fmtHHMM(l.net)}` : fmtMD(l.net);
+    const en = rocketName(l);
+    const zh = rocketZh(en);
+    const nameHtml = (zh && zh !== en)
+      ? `<div class="li-rocket">${esc(zh)}</div><div class="li-rocket-en">${esc(en)}</div>`
+      : `<div class="li-rocket">${esc(en)}</div>`;
+    const badge = demo ? '演示' : (isUp ? '即将' : '完成');
+    return `
+      <div class="launch-item ${domestic ? 'domestic' : ''}${demo ? ' demo' : ''}" data-list="${isUp ? 'up' : 'past'}" data-idx="${idx}" title="${demo ? '离线演示数据 · ' : ''}${esc(rocketFull(l))} · ${esc(missionName(l))}">
+        <div class="li-left">
+          <span class="li-flag">${ci.flag}</span>
+          <div class="li-name">${nameHtml}</div>
+        </div>
+        <div class="li-right">
+          <div class="li-date">${esc(date)}</div>
+          <div class="li-code">${esc(launchCountry(l) || '—')}</div>
+          <span class="li-badge">${badge}</span>
+        </div>
+      </div>`;
+  }
+
+  function renderSidebar() {
+    const now = Date.now();
+    const pastMonth = state.previous.filter(l => {
+      const t = new Date(l.net).getTime();
+      return isFinite(t) && t >= now - MONTH_MS;
+    });
+    const pastShown = pastMonth.length >= 3 ? pastMonth : state.previous.slice(0, 12);
+
+    DOM.logCount.textContent = pastShown.length;
+    DOM.pastList.innerHTML = pastShown.length
+      ? pastShown.map((l, i) => launchItemHTML(l, 'past', state.prevDemo, i)).join('')
+      : '<div class="side-empty">暂无近一月发射记录。</div>';
+
+    const upShown = state.upcoming.slice(0, 5);
+    DOM.upList.innerHTML = upShown.length
+      ? upShown.map((l, i) => launchItemHTML(l, 'up', state.upDemo, i)).join('')
+      : '<div class="side-empty">暂无即将发射的任务。</div>';
+  }
+
+  /* ---------- 悬停详情卡：鼠标移到侧栏发射任务时，在条目旁显示 ---------- */
+  function hoverCardHTML(l, demo) {
+    const ci = countryInfo(l);
+    const isUp = new Date(l.net).getTime() > Date.now();
+    return `
+      <div class="hc-top">
+        <span class="hc-status">${esc(statusZh(l))}</span>
+        ${demo ? '<span class="hc-tag demo">演示数据</span>' : `<span class="hc-tag">${isUp ? '即将发射' : '已发射'}</span>`}
+      </div>
+      <div class="hc-title">${esc(missionName(l))}</div>
+      <div class="hc-sub">${esc(rocketBilingual(l))}${provider(l) ? ' · ' + esc(provider(l)) : ''}</div>
+      <div class="hc-grid">
+        <div class="hc-cell"><span class="hc-k">发射时间</span>
+          <span class="hc-v mono">${esc(fmtDateTime(l.net))}</span>
+          <span class="hc-utc">${esc(fmtDateTimeUTC(l.net))}</span>
+        </div>
+        <div class="hc-cell"><span class="hc-k">发射场</span><span class="hc-v">${esc(siteZh(l))}</span></div>
+        <div class="hc-cell"><span class="hc-k">所属国家</span><span class="hc-v">${ci.flag} ${esc(ci.name)}${launchCountry(l) ? ' · ' + esc(launchCountry(l)) : ''}</span></div>
+        <div class="hc-cell"><span class="hc-k">目标轨道</span><span class="hc-v">${esc(orbitZh(l?.mission?.orbit?.name) || '未公开')}</span></div>
+      </div>`;
+  }
+
+  let hoverItem = null;
+  let hideTimer = null;
+  function showHoverCard(item) {
+    clearTimeout(hideTimer);
+    hoverItem = item;
+    const list = item.dataset.list === 'up' ? state.upcoming : state.previous;
+    const l = list[+item.dataset.idx];
+    if (!l) return;
+    DOM.hoverCard.innerHTML = hoverCardHTML(l, item.classList.contains('demo'));
+    DOM.hoverCard.hidden = false;
+    positionHoverCard(item);
+  }
+  function positionHoverCard(item) {
+    const r = item.getBoundingClientRect();
+    const w = DOM.hoverCard.offsetWidth || 300;
+    const h = DOM.hoverCard.offsetHeight || 260;
+    let left = r.right + 14;
+    if (left + w > window.innerWidth - 10) left = r.left - w - 14;
+    let top = r.top;
+    if (top + h > window.innerHeight - 10) top = Math.max(10, window.innerHeight - h - 10);
+    DOM.hoverCard.style.left = Math.max(10, left) + 'px';
+    DOM.hoverCard.style.top = Math.max(10, top) + 'px';
+  }
+  function hideHoverCardDelayed() {
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(hideHoverCard, 140);
+  }
+  function hideHoverCard() {
+    clearTimeout(hideTimer);
+    hoverItem = null;
+    DOM.hoverCard.hidden = true;
+  }
+
+  function renderNextLaunch() {
+    const l = state.upcoming[0];
+    if (!l) { DOM.nlName.textContent = '—'; return; }
+    DOM.nlName.textContent = `${rocketBilingual(l)} · ${missionName(l)}`;
+  }
+
+  function renderAll() {
+    renderSidebar();
+    renderNextLaunch();
+  }
+
+  /* ============================================================
+   *  数据获取（Launch Library 2，含离线兜底）
+   * ============================================================ */
+  function fetchJSON(url) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 12000);
+    return fetch(url, { signal: ctrl.signal })
+      .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .finally(() => clearTimeout(t));
+  }
+
+  function sampleData() {
+    const now = Date.now();
+    const mk = (daysAgo, name, rocket, family, country, site, provider, mission, orbit, status = 'Launch Successful') => ({
+      name, net: new Date(now - daysAgo * 864e5).toISOString(),
+      status: { name: status },
+      rocket: { configuration: { name: rocket, full_name: rocket, family } },
+      pad: { location: { name: site, country_code: country } },
+      launch_service_provider: { name: provider },
+      mission: { name: mission, orbit: { name: orbit } },
+    });
+    return {
+      previous: [
+        mk(1, '长征五号B | 天舟八号', 'Long March 5B', 'Long March', 'CHN', '文昌航天发射场', '中国航天科技集团', '天舟八号货运飞船', '近地轨道 (LEO)'),
+        mk(4, 'Falcon 9 Block 5 | Starlink G6-71', 'Falcon 9 Block 5', 'Falcon', 'USA', '卡纳维拉尔角 SLC-40', 'SpaceX', 'Starlink Group 6-71', '近地轨道 (LEO)'),
+        mk(7, '长征二号F | 神舟十八号', 'Long March 2F', 'Long March', 'CHN', '酒泉卫星发射中心', '中国航天科技集团', '神舟十八号载人飞船', '近地轨道 (LEO)'),
+        mk(10, 'Soyuz 2.1a | Progress MS-29', 'Soyuz 2.1a', 'Soyuz', 'RUS', '拜科努尔 LC-31', 'Roscosmos', 'Progress MS-29', '近地轨道 (LEO)'),
+        mk(13, 'Falcon 9 Block 5 | NROL-167', 'Falcon 9 Block 5', 'Falcon', 'USA', '范登堡 SLC-4E', 'SpaceX', 'NROL-167', '近地轨道 (LEO)'),
+        mk(16, '长征三号乙 | 北斗导航卫星', 'Long March 3B/E', 'Long March', 'CHN', '西昌卫星发射中心', '中国航天科技集团', '北斗三号导航卫星', '地球同步转移轨道 (GTO)'),
+        mk(20, 'Electron | Capella Acadia 5', 'Electron', 'Electron', 'USA', '玛希亚 LC-1B', 'Rocket Lab', 'Capella Acadia 5', '太阳同步轨道 (SSO)'),
+        mk(24, 'Falcon Heavy | GOES-U', 'Falcon Heavy', 'Falcon', 'USA', '肯尼迪航天中心 LC-39A', 'SpaceX', 'GOES-U', '地球同步转移轨道 (GTO)'),
+      ],
+      upcoming: [
+        { name: '长征六号 | 试验卫星', net: new Date(now + 2 * 864e5 + 7 * 36e5).toISOString(), status: { name: 'Go' }, rocket: { configuration: { name: 'Long March 6', full_name: 'Long March 6', family: 'Long March' } }, pad: { location: { name: '太原卫星发射中心', country_code: 'CHN' } }, launch_service_provider: { name: '中国航天科技集团' }, mission: { name: '试验卫星', orbit: { name: '太阳同步轨道 (SSO)' } } },
+        { name: 'Starship | IFT-5', net: new Date(now + 5 * 864e5).toISOString(), status: { name: 'Go' }, rocket: { configuration: { name: 'Starship', full_name: 'Starship / Super Heavy', family: 'Starship' } }, pad: { location: { name: '星港 Starbase', country_code: 'USA' } }, launch_service_provider: { name: 'SpaceX' }, mission: { name: 'Integrated Flight Test 5', orbit: { name: '亚轨道' } } },
+      ],
+    };
+  }
+
+  // 会话缓存：读 / 写最近一次成功数据（避免换页或瞬时故障时内容跳变）
+  function readCache() {
+    try {
+      const c = JSON.parse(sessionStorage.getItem(CACHE_KEY));
+      if (c && Array.isArray(c.previous) && Array.isArray(c.upcoming)) return c;
+    } catch (e) { /* 忽略 */ }
+    return null;
+  }
+  function writeCache(prev, up) {
+    try {
+      sessionStorage.setItem(CACHE_KEY, JSON.stringify({ previous: prev, upcoming: up, ts: Date.now() }));
+    } catch (e) { /* 忽略 */ }
+  }
+
+  /* ---------- 备用数据源：RocketLaunch.Live（无 Key、开放 CORS） ---------- */
+  const CC2TO3 = {
+    us: 'USA', cn: 'CHN', ru: 'RUS', jp: 'JPN', in: 'IND', kz: 'KAZ', fr: 'FRA',
+    nz: 'NZL', ir: 'IRN', il: 'ISR', kr: 'KOR', au: 'AUS', de: 'DEU', gb: 'GBR',
+    gf: 'GUF', br: 'BRA', es: 'ESP', it: 'ITA', ca: 'CAN', ua: 'UKR', tw: 'TWN',
+  };
+  function rllToLaunch(l) {
+    const c2 = String(l?.pad?.location?.country || '').toLowerCase();
+    const v = l?.vehicle?.name || '未知型号';
+    return {
+      name: l?.name || '',
+      net: l?.sort_date || l?.win_open || l?.win_close || null,
+      status: { name: l?.status?.name || '—' },
+      rocket: { configuration: { name: v, full_name: v, family: v } },
+      pad: { location: { name: l?.pad?.location?.name || l?.pad?.name || '未公开发射场', country_code: CC2TO3[c2] || (c2 ? c2.toUpperCase() : '') } },
+      launch_service_provider: { name: l?.provider?.name || '' },
+      mission: { name: l?.mission?.name || '', orbit: { name: l?.mission?.type || '' } },
+    };
+  }
+  const parseLL2 = (json) => (json && Array.isArray(json.results)) ? json.results : [];
+  const parseRLL = (json) => (Array.isArray(json) ? json : []).map(rllToLaunch);
+
+  // 直连失败后经 CORS 代理（allorigins）重试一次
+  async function fetchWithFallback(url) {
+    let lastErr = '请求失败';
+    const urls = [url, `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`];
+    for (const u of urls) {
+      try { return { ok: true, data: await fetchJSON(u) }; }
+      catch (e) { lastErr = (e && e.message) || String(e); }
+    }
+    return { ok: false, error: lastErr };
+  }
+
+  // 数据源链：Launch Library 2 → RocketLaunch.Live（各自带代理重试），并统一按时间排序
+  function fetchList(kind) {
+    const asc = kind === 'upcoming';
+    const attempts = asc ? [
+      { url: `${API_BASE}upcoming/?limit=8&ordering=net`, parse: parseLL2, src: 'LL2' },
+      { url: 'https://fdo.rocketlaunch.live/json/launches/next/8', parse: parseRLL, src: 'RLL' },
+    ] : [
+      { url: `${API_BASE}previous/?limit=40&ordering=-net`, parse: parseLL2, src: 'LL2' },
+      { url: 'https://fdo.rocketlaunch.live/json/launches/previous/40', parse: parseRLL, src: 'RLL' },
+    ];
+    return (async () => {
+      for (const a of attempts) {
+        const res = await fetchWithFallback(a.url);
+        if (res.ok) {
+          try {
+            const list = a.parse(res.data);
+            if (list && list.length) {
+              list.sort((x, y) => {
+                const tx = new Date(x.net).getTime();
+                const ty = new Date(y.net).getTime();
+                const vx = isFinite(tx) ? tx : (asc ? Infinity : -Infinity);
+                const vy = isFinite(ty) ? ty : (asc ? Infinity : -Infinity);
+                return asc ? vx - vy : vy - vx;
+              });
+              return { list, src: a.src };
+            }
+            state.lastErrors[kind].push(`${a.src}: 返回空数据`);
+          } catch (e) {
+            state.lastErrors[kind].push(`${a.src}: 数据解析失败`);
+          }
+        } else {
+          state.lastErrors[kind].push(`${a.src}: ${res.error}`);
+        }
+      }
+      return null;
+    })();
+  }
+
+  async function refresh() {
+    if (state.loading) return;
+    state.loading = true;
+    DOM.loadingBar.classList.add('on');
+    DOM.liveText.textContent = '同步数据中';
+    DOM.refreshBtn.classList.add('spinning');
+
+    // 多数据源自动切换（LL2 → RocketLaunch.Live，均带 CORS 代理重试）
+    state.lastErrors = { past: [], upcoming: [] };
+    const [prevRes, upRes] = await Promise.all([fetchList('past'), fetchList('upcoming')]);
+
+    const cache = readCache();
+    const demo = sampleData();
+
+    // —— 已发射：实时 > 沿用上次成功 > 会话缓存 > 演示 ——
+    let prevSrc, prevDetail;
+    if (prevRes) {
+      state.previous = prevRes.list; state.prevDemo = false; prevSrc = 'live'; prevDetail = prevRes.src;
+    } else if (state.prevLive && state.previous.length) {
+      prevSrc = 'stale';
+    } else if (cache && cache.previous.length) {
+      state.previous = cache.previous; state.prevDemo = false; prevSrc = 'cache';
+    } else {
+      state.previous = demo.previous; state.prevDemo = true; prevSrc = 'demo';
+    }
+
+    // —— 即将发射：同上 ——
+    let upSrc, upDetail;
+    if (upRes) {
+      state.upcoming = upRes.list; state.upDemo = false; upSrc = 'live'; upDetail = upRes.src;
+    } else if (state.upLive && state.upcoming.length) {
+      upSrc = 'stale';
+    } else if (cache && cache.upcoming.length) {
+      state.upcoming = cache.upcoming; state.upDemo = false; upSrc = 'cache';
+    } else {
+      state.upcoming = demo.upcoming; state.upDemo = true; upSrc = 'demo';
+    }
+
+    if (prevSrc === 'live') state.prevLive = true;
+    if (upSrc === 'live') state.upLive = true;
+
+    // 只缓存实时数据，演示数据不入缓存
+    if (prevSrc === 'live' || upSrc === 'live') {
+      writeCache(
+        prevSrc === 'live' ? state.previous : (cache ? cache.previous : []),
+        upSrc === 'live' ? state.upcoming : (cache ? cache.upcoming : [])
+      );
+    }
+
+    state.featured = state.previous[0] || state.upcoming[0] || null;
+
+    applyTheme(isDomestic(state.featured) ? 'blue' : 'black');
+    buildRocket(state.featured);
+    renderAll();
+
+    // 状态指示（含数据源与错误诊断）
+    const srcs = [prevSrc, upSrc];
+    const allLive = srcs.every(x => x === 'live');
+    const anyDemo = srcs.includes('demo');
+    const anyStale = srcs.includes('stale') || srcs.includes('cache');
+    state.failStreak = allLive ? 0 : state.failStreak + 1;
+    const liveSrc = [...new Set(
+      [prevSrc === 'live' ? prevDetail : null, upSrc === 'live' ? upDetail : null].filter(Boolean)
+    )].join(' + ');
+    DOM.liveText.textContent = allLive
+      ? (liveSrc ? `实时连接中 · ${liveSrc}` : '实时连接中')
+      : (anyDemo ? (srcs.includes('live') ? '部分数据离线' : '离线演示模式')
+      : (anyStale ? '沿用最近数据' : '数据已缓存'));
+    const errs = [...new Set([...state.lastErrors.past, ...state.lastErrors.upcoming])];
+    DOM.liveText.title = allLive
+      ? (liveSrc.includes('RLL') ? '数据源：RocketLaunch.Live' : '数据源：The Space Devs · Launch Library 2')
+      : (errs.length ? '请求失败详情：' + errs.join('；') : '数据源均不可用，已展示演示数据');
+    if (errs.length) console.error('[火箭监测] 数据源请求失败：', errs);
+    DOM.liveText.parentElement.classList.toggle('offline', !allLive);
+    DOM.updatedAt.textContent = `最后更新 ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false })}`;
+    DOM.loadingBar.classList.remove('on');
+    DOM.refreshBtn.classList.remove('spinning');
+    state.loading = false;
+    return srcs;
+  }
+
+  /* ============================================================
+   *  倒计时 + 动画循环
+   * ============================================================ */
+  function tickCountdown() {
+    const l = state.upcoming[0];
+    if (!l) { DOM.nlCount.textContent = 'T- --:--:--'; return; }
+    const diff = new Date(l.net).getTime() - Date.now();
+    if (diff <= 0) { DOM.nlCount.textContent = 'T- 即将发射'; return; }
+    const d = Math.floor(diff / 864e5);
+    const h = Math.floor((diff % 864e5) / 36e5);
+    const m = Math.floor((diff % 36e5) / 6e4);
+    const s = Math.floor((diff % 6e4) / 1e3);
+    DOM.nlCount.textContent = d > 0
+      ? `T- ${d}天 ${pad2(h)}:${pad2(m)}:${pad2(s)}`
+      : `T- ${pad2(h)}:${pad2(m)}:${pad2(s)}`;
+  }
+
+  const clock = new THREE.Clock();
+  function animate() {
+    requestAnimationFrame(animate);
+    const dt = Math.min(clock.getDelta(), 0.1);
+    const t = clock.getElapsedTime();
+    controls.update();
+
+    // 星空闪烁 + 星云缓慢漂移
+    starUniforms.uTime.value = t;
+    for (let i = 0; i < nebulas.length; i++) {
+      const s = nebulas[i];
+      const a = t * 0.02 + i * 2.1;
+      const rad = 15 + i * 2.5;
+      s.position.x = Math.cos(a) * rad;
+      s.position.z = Math.sin(a) * rad;
+      s.material.opacity = (state.theme === 'blue' ? 0.16 : 0.13) + 0.04 * Math.sin(t * 0.3 + i * 2);
+    }
+
+    // 流星
+    for (const s of shooters) {
+      if (!s.active) {
+        s.delay -= dt;
+        if (s.delay <= 0) launchShooter(s);
+      } else {
+        s.t += dt;
+        const p = s.t / s.dur;
+        s.pos.addScaledVector(s.dir, dt * 13);
+        s.line.position.copy(s.pos);
+        s.line.material.opacity = Math.sin(Math.PI * Math.min(p, 1)) * 0.9;
+        if (p >= 1) { s.active = false; s.line.visible = false; s.delay = 9 + Math.random() * 16; }
+      }
+    }
+
+    if (flameOuter) {
+      const flick = 0.85 + Math.sin(t * 9) * 0.06 + Math.sin(t * 23) * 0.05 + Math.random() * 0.05;
+      flameOuter.scale.y = flick;
+      flameOuter.material.opacity = 0.42 + Math.sin(t * 7) * 0.12 + 0.18;
+      if (flameInner) flameInner.scale.y = flick * 0.9;
+      engineLight.intensity = 7 * flick;
+    }
+
+    renderer.render(scene, camera);
+  }
+
+  /* ============================================================
+   *  事件与初始化
+   * ============================================================ */
+  // 根据画布尺寸自适应相机距离，保证加长后的火箭完整可见
+  function fitCamera() {
+    const w = canvas.clientWidth || 1;
+    const h = canvas.clientHeight || 1;
+    const aspect = w / h;
+    const tan = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+    const distV = 8.9 / (2 * tan);                        // 竖直容纳整箭
+    const distH = 2.7 / (2 * tan * Math.max(aspect, 0.5)); // 水平容纳（含助推器）
+    const dist = THREE.MathUtils.clamp(Math.max(distV, distH) + 0.4, 7.5, 21);
+    const dir = new THREE.Vector3(0.5, 1.0, 1.0).normalize();
+    controls.target.set(0, 1.3, 0);
+    camera.position.copy(controls.target).addScaledVector(dir, dist);
+    controls.update();
+  }
+
+  function onResize() {
+    const w = canvas.clientWidth || 1;
+    const h = canvas.clientHeight || 1;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    fitCamera();
+  }
+  window.addEventListener('resize', onResize);
+
+  DOM.refreshBtn.addEventListener('click', () => refresh());
+
+  // 悬停侧栏发射任务 → 在条目旁显示详情卡
+  const sideScrollEl = document.getElementById('sideScroll');
+  sideScrollEl.addEventListener('mouseover', (e) => {
+    const item = e.target.closest('.launch-item');
+    if (!item) return;
+    if (item !== hoverItem) showHoverCard(item);
+    else positionHoverCard(item);
+  });
+  sideScrollEl.addEventListener('mouseout', (e) => {
+    const to = e.relatedTarget;
+    if (to && to.closest && to.closest('.launch-item')) return;   // 仍在条目内
+    if (to && to.closest && to.closest('#hoverCard')) return;     // 移到详情卡
+    if (e.target.closest('.launch-item')) hideHoverCardDelayed();
+  });
+  sideScrollEl.addEventListener('scroll', () => { if (hoverItem) positionHoverCard(hoverItem); });
+  window.addEventListener('resize', () => { if (hoverItem) positionHoverCard(hoverItem); });
+  DOM.hoverCard.addEventListener('mouseover', () => clearTimeout(hideTimer));
+  DOM.hoverCard.addEventListener('mouseleave', () => { if (hoverItem) hideHoverCardDelayed(); });
+
+  // 单击画布切换自动旋转（区分拖拽与点击：位移小才算单击）
+  let downX = 0, downY = 0;
+  DOM.canvas.addEventListener('pointerdown', (e) => { downX = e.clientX; downY = e.clientY; });
+  DOM.canvas.addEventListener('pointerup', (e) => {
+    const dx = e.clientX - downX, dy = e.clientY - downY;
+    if (dx * dx + dy * dy < 36) controls.autoRotate = !controls.autoRotate;
+  });
+
+  // 链式自动刷新：连续失败时自动加倍间隔，规避接口限流
+  function scheduleNext() {
+    const delay = REFRESH_MS * (state.failStreak > 0 ? 2 : 1);
+    setTimeout(async () => { await refresh(); scheduleNext(); }, delay);
+  }
+
+  // 初始化
+  buildRocket(null);
+  onResize();
+  refresh().then(scheduleNext);
+  setInterval(tickCountdown, 1000);
+  tickCountdown();
+  animate();
+  </script>
+</body>
+</html>
