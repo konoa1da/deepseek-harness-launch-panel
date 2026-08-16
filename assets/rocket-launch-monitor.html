@@ -167,7 +167,8 @@
   /* ============ 左侧栏 ============ */
   aside {
     grid-area: sidebar;
-    border-right: 1px solid var(--line);
+    border-right: 1px solid var(--panel-border);
+    box-shadow: 4px 0 18px rgba(11, 26, 50, 0.07);
     background: var(--panel);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
@@ -1184,12 +1185,12 @@
 
     DOM.logCount.textContent = pastShown.length;
     DOM.pastList.innerHTML = pastShown.length
-      ? pastShown.map((l, i) => launchItemHTML(l, 'past', state.prevDemo, i)).join('')
+      ? pastShown.map((l) => launchItemHTML(l, 'past', state.prevDemo, state.previous.indexOf(l))).join('')
       : '<div class="side-empty">暂无近一月发射记录。</div>';
 
     const upShown = state.upcoming.slice(0, 5);
     DOM.upList.innerHTML = upShown.length
-      ? upShown.map((l, i) => launchItemHTML(l, 'up', state.upDemo, i)).join('')
+      ? upShown.map((l) => launchItemHTML(l, 'up', state.upDemo, state.upcoming.indexOf(l))).join('')
       : '<div class="side-empty">暂无即将发射的任务。</div>';
   }
 
@@ -1346,6 +1347,14 @@
   }
 
   // 数据源链：Launch Library 2 → RocketLaunch.Live（各自带代理重试），并统一按时间排序
+  // 任务是否已发射：计划时间已过，或状态已为发射后状态（与面板 Node half 判定一致）
+  function isLaunched(l, now) {
+    const t = new Date(l.net).getTime();
+    if (isFinite(t) && t <= now) return true;
+    const s = String((l && l.status && l.status.name) || '').toLowerCase();
+    return /success|failure|in flight|partial failure/.test(s);
+  }
+
   function fetchList(kind) {
     const asc = kind === 'upcoming';
     const attempts = asc ? [
@@ -1419,6 +1428,31 @@
       state.upcoming = cache.upcoming; state.upDemo = false; upSrc = 'cache';
     } else {
       state.upcoming = demo.upcoming; state.upDemo = true; upSrc = 'demo';
+    }
+
+    // —— 已发射归类：即将发射中计划时间已过（或状态已为发射后）的任务立即并入已发射列表 ——
+    // 上游 upcoming 接口更新有延迟，不处理会出现"已发射任务还挂在即将发射栏"。
+    // 并入时按 id/name+net 去重，避免与已发射接口的条目重复。
+    {
+      const nowMs = Date.now();
+      const seen = new Set(state.previous.map(l => l.id ?? `${l.name}|${l.net}`));
+      const moved = [];
+      state.upcoming = state.upcoming.filter(l => {
+        if (!isLaunched(l, nowMs)) return true;
+        const k = l.id ?? `${l.name}|${l.net}`;
+        if (seen.has(k)) return false;
+        seen.add(k);
+        moved.push(l);
+        return false;
+      });
+      if (moved.length) {
+        state.previous = state.previous.concat(moved).sort((x, y) => {
+          const tx = new Date(x.net).getTime(), ty = new Date(y.net).getTime();
+          const vx = isFinite(tx) ? tx : -Infinity, vy = isFinite(ty) ? ty : -Infinity;
+          return vy - vx;
+        });
+        state.prevDemo = false;
+      }
     }
 
     if (prevSrc === 'live') state.prevLive = true;
