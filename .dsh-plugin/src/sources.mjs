@@ -1,16 +1,22 @@
 // 发射数据源（Node half，服务端直连无 CORS 限制）：
-// 分节独立降级链：Launch Library 2 → RocketLaunch.Live → 内置演示数据。
-// 内存缓存 3 分钟（client 每 5 分钟轮询 + 手动刷新，缓存防重复打爆限流）。
+// 分节独立降级链：Launch Library 2 → RocketLaunch.Live → 上次成功数据 → 内置演示数据。
+// 内存缓存 5 分钟（client 每 5 分钟轮询 + 手动刷新，缓存防重复打爆限流）。
 import { CC2TO3 } from './zh.mjs'
 
 const LL2_BASE = 'https://ll.thespacedevs.com/2.2.0/launch/'
 const RLL_PAST = 'https://fdo.rocketlaunch.live/json/launches/previous/40'
 const RLL_NEXT = 'https://fdo.rocketlaunch.live/json/launches/next/8'
-const CACHE_TTL = 3 * 60 * 1000
+const CACHE_TTL = 5 * 60 * 1000
+// LL2 匿名限流较严（429 后 retry-after 可达数十分钟）：收到 429 后冷却一段时间，
+// 期间跳过 LL2 直接走 RLL，避免反复重试雪崩式触发限流。
+const LL2_COOLDOWN_MS = 15 * 60 * 1000
 const FETCH_TIMEOUT = 12000
 
 let cache = null
 let cacheAt = 0
+let ll2CooldownUntil = 0
+// 上次成功（非纯演示）数据：双源都失败时兜底返回，避免面板闪"离线"。
+let lastGood = null
 
 async function fetchJSON(url) {
   const ctrl = new AbortController()
@@ -20,20 +26,28 @@ async function fetchJSON(url) {
       signal: ctrl.signal,
       headers: { 'user-agent': 'launch-panel/0.1 (+https://github.com/deepseek-ai/deepseek-harness)' },
     })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    if (!res.ok) {
+      const err = new Error(`HTTP ${res.status}`)
+      err.status = res.status
+      throw err
+    }
     return await res.json()
   } finally {
     clearTimeout(timer)
   }
 }
 
-/** RocketLaunch.Live 条目 → 内部归一化形状（与 LL2 对齐）。 */
+/** RocketLaunch.Live 条目 → 内部归一化形状（与 LL2 对齐）。RLL 时间字段为秒级 Unix 时间戳（数字或数字字符串）。 */
 function rllToLaunch(l) {
   const c2 = String(l?.pad?.location?.country || '').toLowerCase()
   const v = l?.vehicle?.name || '未知型号'
+  let net = l?.sort_date ?? l?.win_open ?? l?.win_close ?? null
+  if (typeof net === 'string' && /^\d+$/.test(net)) net = Number(net)
+  if (typeof net === 'number') net = (net > 1e11 ? net : net * 1000) // 秒 → 毫秒
+  net = typeof net === 'number' ? new Date(net).toISOString() : net
   return {
     name: l?.name || '',
-    net: l?.sort_date || l?.win_open || l?.win_close || null,
+    net,
     status: { name: l?.status?.name || '—' },
     rocket: { configuration: { name: v, full_name: v, family: v } },
     pad: {
@@ -102,29 +116,46 @@ export async function fetchLaunches() {
   let sourcePast = 'demo', sourceUpcoming = 'demo'
 
   // —— 已发射 ——
-  try {
-    const p = await fetchJSON(`${LL2_BASE}previous/?limit=40&ordering=-net`)
-    if (p && Array.isArray(p.results) && p.results.length) { previous = p.results; sourcePast = 'll2' }
-  } catch { /* 尝试下一源 */ }
+  if (now >= ll2CooldownUntil) {
+    try {
+      const p = await fetchJSON(`${LL2_BASE}previous/?limit=40&ordering=-net`)
+      if (p && Array.isArray(p.results) && p.results.length) { previous = p.results; sourcePast = 'll2' }
+    } catch (e) {
+      if (e.status === 429) ll2CooldownUntil = now + LL2_COOLDOWN_MS
+    }
+  }
   if (sourcePast === 'demo') {
     try {
       const r = await fetchJSON(RLL_PAST)
-      if (Array.isArray(r) && r.length) { previous = r.map(rllToLaunch); sourcePast = 'rll' }
+      const list = r?.result ?? r
+      if (Array.isArray(list) && list.length) { previous = list.map(rllToLaunch); sourcePast = 'rll' }
     } catch { /* 回退演示 */ }
   }
 
   // —— 即将发射 ——
-  try {
-    const u = await fetchJSON(`${LL2_BASE}upcoming/?limit=8&ordering=net`)
-    if (u && Array.isArray(u.results) && u.results.length) { upcoming = u.results; sourceUpcoming = 'll2' }
-  } catch { /* 尝试下一源 */ }
+  if (now >= ll2CooldownUntil) {
+    try {
+      const u = await fetchJSON(`${LL2_BASE}upcoming/?limit=8&ordering=net`)
+      if (u && Array.isArray(u.results) && u.results.length) { upcoming = u.results; sourceUpcoming = 'll2' }
+    } catch (e) {
+      if (e.status === 429) ll2CooldownUntil = now + LL2_COOLDOWN_MS
+    }
+  }
   if (sourceUpcoming === 'demo') {
     try {
       const r = await fetchJSON(RLL_NEXT)
-      if (Array.isArray(r) && r.length) { upcoming = r.map(rllToLaunch); sourceUpcoming = 'rll' }
+      const list = r?.result ?? r
+      if (Array.isArray(list) && list.length) { upcoming = list.map(rllToLaunch); sourceUpcoming = 'rll' }
     } catch { /* 回退演示 */ }
   }
 
+  // —— 兜底：双源失败时优先用上次成功数据（stale），而不是直接跳演示 ——
+  if (previous.length === 0 && lastGood && lastGood.previous.length) {
+    previous = lastGood.previous; sourcePast = lastGood.sourcePast
+  }
+  if (upcoming.length === 0 && lastGood && lastGood.upcoming.length) {
+    upcoming = lastGood.upcoming; sourceUpcoming = lastGood.sourceUpcoming
+  }
   if (previous.length === 0) { previous = demoData().previous; sourcePast = 'demo' }
   if (upcoming.length === 0) { upcoming = demoData().upcoming; sourceUpcoming = 'demo' }
 
@@ -152,5 +183,9 @@ export async function fetchLaunches() {
 
   cache = { previous, upcoming, sourcePast, sourceUpcoming, ts: now }
   cacheAt = now
+  // 记录非纯演示数据，供下次双源全失败时 stale 兜底（避免面板闪"离线"）
+  if (sourcePast !== 'demo' || sourceUpcoming !== 'demo') {
+    lastGood = { previous: previous.slice(), upcoming: upcoming.slice(), sourcePast, sourceUpcoming }
+  }
   return cache
 }
