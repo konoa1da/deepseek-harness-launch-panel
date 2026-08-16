@@ -34,6 +34,7 @@
     --hover: rgba(29, 95, 255, 0.12);
     --shadow: 0 16px 48px rgba(23, 45, 90, 0.10);
     --line: rgba(11, 26, 50, 0.09);
+    --side-line: rgba(11, 26, 50, 0.18);
     --pill: rgba(29, 95, 255, 0.09);
     --live: #1d5fff;
     --flame: #3f7cff;
@@ -59,6 +60,7 @@
     --hover: rgba(255, 255, 255, 0.13);
     --shadow: 0 18px 52px rgba(0, 0, 0, 0.55);
     --line: rgba(255, 255, 255, 0.10);
+    --side-line: rgba(255, 255, 255, 0.18);
     --pill: rgba(255, 255, 255, 0.08);
     --live: #ffffff;
     --flame: #ffffff;
@@ -167,8 +169,8 @@
   /* ============ 左侧栏 ============ */
   aside {
     grid-area: sidebar;
-    border-right: 1px solid var(--panel-border);
-    box-shadow: 4px 0 18px rgba(11, 26, 50, 0.07);
+    border-right: 1px solid var(--side-line);
+    box-shadow: 8px 0 26px rgba(11, 26, 50, 0.12);
     background: var(--panel);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
@@ -340,7 +342,7 @@
   /* ============ 响应式缩放适配 ============ */
   @media (max-width: 900px) {
     body { grid-template-columns: 1fr; grid-template-rows: auto auto 1fr; grid-template-areas: "header" "sidebar" "main"; }
-    aside { border-right: none; border-bottom: 1px solid var(--line); max-height: 200px; }
+    aside { border-right: none; border-bottom: 1px solid var(--side-line); max-height: 200px; }
     .next-launch { right: 12px; top: 12px; padding: 10px 14px; }
     .next-launch .nl-count { font-size: 17px; }
     .hover-card { width: min(300px, calc(100vw - 24px)); }
