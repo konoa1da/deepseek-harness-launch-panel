@@ -13,7 +13,7 @@ const name = "launch-panel";
 
 const LAUNCHES_PATH = '/launch-panel/launches' // 与 src/routes.mjs 的 ROUTE_PREFIX 保持同步
 const STORE_KEY = 'launch-panel:open'
-const POLL_MS = 5 * 60 * 1000
+const POLL_MS = 15 * 60 * 1000 // 15 分钟轮询一次（服务端另有 15 分钟缓存，避免触发上游限流）
 const TZ_BJ = 8 * 3600 * 1000
 
 const CSS = `
@@ -149,7 +149,7 @@ function apply(ctx = {}) {
     </div>
     <div class="lp-foot">
       <span class="lp-updated">最后更新 —</span>
-      <span>每 5 分钟刷新</span>
+      <span>每 15 分钟刷新</span>
     </div>
     <div class="lp-open-page">
       <a href="/launch-panel/page" target="_blank" rel="noopener" title="打开完整火箭监测页">

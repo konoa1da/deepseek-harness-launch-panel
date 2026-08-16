@@ -1,12 +1,12 @@
 // 发射数据源（Node half，服务端直连无 CORS 限制）：
 // 分节独立降级链：Launch Library 2 → RocketLaunch.Live → 上次成功数据 → 内置演示数据。
-// 内存缓存 5 分钟（client 每 5 分钟轮询 + 手动刷新，缓存防重复打爆限流）。
+// 内存缓存 15 分钟（client 每 15 分钟轮询 + 手动刷新，缓存挡住重复请求，避免触发上游限流）。
 import { CC2TO3 } from './zh.mjs'
 
 const LL2_BASE = 'https://ll.thespacedevs.com/2.2.0/launch/'
 const RLL_PAST = 'https://fdo.rocketlaunch.live/json/launches/previous/40'
 const RLL_NEXT = 'https://fdo.rocketlaunch.live/json/launches/next/8'
-const CACHE_TTL = 5 * 60 * 1000
+const CACHE_TTL = 15 * 60 * 1000
 // LL2 匿名限流较严（429 后 retry-after 可达数十分钟）：收到 429 后冷却一段时间，
 // 期间跳过 LL2 直接走 RLL，避免反复重试雪崩式触发限流。
 const LL2_COOLDOWN_MS = 15 * 60 * 1000
