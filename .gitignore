@@ -1,6 +1,9 @@
 # Dependencies
 node_modules/
 
+# DSH harness runtime artifacts
+.dsh/
+
 # Local npm cache (sandbox workaround)
 .npm-cache/
 

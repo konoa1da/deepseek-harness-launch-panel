@@ -166,6 +166,113 @@ export function siteZhName(siteEn, padName, countryCode) {
     .trim() || raw
 }
 
+/** 常见任务名关键词 → 中文（norm 后包含匹配，数组顺序即优先级，长词在前）。 */
+const MISSION_ZH = [
+  ['starlink', '星链'],
+  ['europaclipper', '欧罗巴快船'],
+  ['osirisrex', '冥王号'],
+  ['osiris', '冥王号'],
+  ['crewdragon', '载人龙'],
+  ['cargodragon', '货运龙'],
+  ['dragon', '龙飞船'],
+  ['cygnus', '天鹅座'],
+  ['progress', '进步号'],
+  ['soyuz', '联盟'],
+  ['shenzhou', '神舟'],
+  ['tianzhou', '天舟'],
+  ['tianhe', '天和'],
+  ['wentian', '问天'],
+  ['mengtian', '梦天'],
+  ['tiangong', '天宫'],
+  ['beidou', '北斗'],
+  ['yaogan', '遥感'],
+  ['gaofen', '高分'],
+  ['jilin', '吉林一号'],
+  ['queqiao', '鹊桥'],
+  ['change', '嫦娥'],
+  ['tianwen', '天问'],
+  ['xuntian', '巡天'],
+  ['goes', '地球静止环境业务卫星'],
+  ['psyche', '灵神星'],
+  ['artemis', '阿尔忒弥斯'],
+  ['transporter', '运输者'],
+  ['bandwagon', '顺风车'],
+  ['oneweb', '一网'],
+  ['eutelsat', '欧洲通信卫星'],
+  ['intelsat', '国际通信卫星'],
+  ['inmarsat', '国际海事卫星'],
+  ['echostar', '回声星'],
+  ['sentinel', '哨兵'],
+  ['meteosat', '气象卫星'],
+  ['hubble', '哈勃'],
+  ['jwst', '韦布'],
+  ['webb', '韦布'],
+  ['perseverance', '毅力号'],
+  ['curiosity', '好奇号'],
+  ['insight', '洞察号'],
+  ['ingenuity', '机智号'],
+  ['nrol', '国家侦察局'],
+  ['gps', 'GPS'],
+  ['x37b', 'X-37B'],
+]
+
+/** 任务名英文 → 中文（无对应时保留原名）。 */
+export function missionZh(name) {
+  if (!name) return ''
+  if (/[\u4e00-\u9fff]/.test(name)) return name
+  const k = norm(name)
+  for (const [key, zh] of MISSION_ZH) {
+    if (k.includes(key)) return zh
+  }
+  return name
+}
+
+/** 常见发射服务商 → 中文（无对应时保留原名）。 */
+const PROVIDER_ZH = {
+  'nasa': '美国宇航局 (NASA)',
+  'roscosmos': '俄罗斯航天局 (Roscosmos)',
+  'cnsa': '中国国家航天局 (CNSA)',
+  'casc': '中国航天科技集团 (CASC)',
+  'casic': '中国航天科工集团 (CASIC)',
+  'esa': '欧洲空间局 (ESA)',
+  'isro': '印度空间研究组织 (ISRO)',
+  'jaxa': '日本宇宙航空研究开发机构 (JAXA)',
+  'kari': '韩国航空航天研究院 (KARI)',
+  'arianespace': '阿丽亚娜航天 (Arianespace)',
+  'ula': '联合发射联盟 (ULA)',
+  'rocketlab': '火箭实验室 (Rocket Lab)',
+  'blueorigin': '蓝色起源 (Blue Origin)',
+  'northropgrumman': '诺斯罗普·格鲁曼 (Northrop Grumman)',
+  'boeing': '波音 (Boeing)',
+  'lockheedmartin': '洛克希德·马丁 (Lockheed Martin)',
+  'firefly': '萤火虫航天 (Firefly)',
+  'astra': '阿斯特拉 (Astra)',
+  'relativity': '相对论航天 (Relativity Space)',
+  'mitsubishi': '三菱重工 (Mitsubishi)',
+  'mhi': '三菱重工 (MHI)',
+  'irgc': '伊斯兰革命卫队 (IRGC)',
+  'chinaaerospacescienceandtechnologycorporation': '中国航天科技集团 (CASC)',
+  'chinaaerospacescienceindustrycorporation': '中国航天科工集团 (CASIC)',
+  'chinaacademyoflaunchvehicletechnology': '中国运载火箭技术研究院 (CALT)',
+  'shanghaiacademyofspaceflighttechnology': '上海航天技术研究院 (SAST)',
+  'chinagreatwallindustrycorporation': '中国长城工业集团 (CGWIC)',
+  'expace': '快舟航天 (ExPace)',
+  'galacticenergy': '星河动力 (Galactic Energy)',
+  'landspace': '蓝箭航天 (LandSpace)',
+  'ispace': '星际荣耀 (iSpace)',
+  'orienspace': '东方空间 (Orienspace)',
+  'spacepioneer': '天兵科技 (Space Pioneer)',
+  'casspace': '中科宇航 (CAS Space)',
+  'deepblueaerospace': '深蓝航天 (Deep Blue Aerospace)',
+  'spacex': 'SpaceX',
+}
+
+export function providerZh(name) {
+  if (!name) return ''
+  if (/[\u4e00-\u9fff]/.test(name)) return name
+  return PROVIDER_ZH[norm(name)] || name
+}
+
 /** 归一化发射条目 → client 直接可渲染的富化对象（含全部中文显示字段）。 */
 export function enrichLaunch(l) {
   const rocketEn = l?.rocket?.configuration?.name || l?.rocket?.configuration?.full_name || l?.rocket?.name || '未知型号'
@@ -182,8 +289,8 @@ export function enrichLaunch(l) {
     rocketEn,
     rocketZh: zh || rocketEn,
     rocketBilingual: (zh && zh !== rocketEn) ? `${zh} · ${rocketEn}` : rocketEn,
-    mission: l?.mission?.name || (nameParts.length > 1 ? nameParts[1].trim() : '') || '未公开任务',
-    provider: l?.launch_service_provider?.name || '',
+    mission: missionZh(l?.mission?.name || (nameParts.length > 1 ? nameParts[1].trim() : '') || '未公开任务'),
+    provider: providerZh(l?.launch_service_provider?.name || ''),
     siteEn: l?.pad?.location?.name || l?.pad?.name || '未公开发射场',
     siteZh: siteZhName(l?.pad?.location?.name || l?.pad?.name || '', l?.pad?.name || '', code),
     country: code,

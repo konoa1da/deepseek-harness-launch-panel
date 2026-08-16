@@ -85,6 +85,14 @@ const timeSort = (asc) => (a, b) => {
   return asc ? va - vb : vb - va
 }
 
+/** 判定任务是否已发射：计划时间已过，或状态已为发射后状态（success/failure/in flight）。 */
+function isLaunched(l, now) {
+  const t = new Date(l.net).getTime()
+  if (Number.isFinite(t) && t <= now) return true
+  const s = String(l?.status?.name || '').toLowerCase()
+  return /success|failure|in flight|partial failure/.test(s)
+}
+
 /** 拉取近一月已发射 + 即将发射（分节独立降级，统一排序）。 */
 export async function fetchLaunches() {
   const now = Date.now()
@@ -120,10 +128,27 @@ export async function fetchLaunches() {
   if (previous.length === 0) { previous = demoData().previous; sourcePast = 'demo' }
   if (upcoming.length === 0) { upcoming = demoData().upcoming; sourceUpcoming = 'demo' }
 
+  // —— 已发射归类：upcoming 中计划时间已过（或状态已为发射后）的任务立即归入已发射列表 ——
+  // 上游 upcoming 接口的状态/时间更新有延迟，不处理会出现"已发射任务还挂在即将发射栏"。
+  // 并入时按 id/name+net 去重：该任务已在 previous（上游 previous 接口）则不再重复并入。
+  const seenIds = new Set(previous.map(l => l.id ?? `${l.name}|${l.net}`))
+  const launchedFromUpcoming = []
+  upcoming = upcoming.filter((l) => {
+    if (!isLaunched(l, now)) return true
+    const k = l.id ?? `${l.name}|${l.net}`
+    if (seenIds.has(k)) return false
+    seenIds.add(k)
+    launchedFromUpcoming.push(l)
+    return false
+  })
+  if (sourceUpcoming === 'demo') launchedFromUpcoming.forEach(l => { l.demo = true })
+  if (launchedFromUpcoming.length) previous.push(...launchedFromUpcoming)
+
   previous.sort(timeSort(false))
   upcoming.sort(timeSort(true))
-  if (sourcePast === 'demo') previous.forEach(l => { l.demo = true })
-  if (sourceUpcoming === 'demo') upcoming.forEach(l => { l.demo = true })
+  if (sourcePast === 'demo') {
+    previous.forEach(l => { if (!launchedFromUpcoming.includes(l)) l.demo = true })
+  }
 
   cache = { previous, upcoming, sourcePast, sourceUpcoming, ts: now }
   cacheAt = now

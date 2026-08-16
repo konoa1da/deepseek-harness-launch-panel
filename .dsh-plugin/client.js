@@ -97,6 +97,12 @@ const bj = (iso) => new Date(new Date(iso).getTime() + TZ_BJ)
 const fmtMD = (iso) => { if (!iso) return '--'; const d = bj(iso); return `${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}` }
 const fmtDT = (iso) => { if (!iso) return '—'; const d = bj(iso); return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())} ${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())} 北京时间` }
 const fmtUTC = (iso) => { if (!iso) return '—'; const d = new Date(iso); return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())} ${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())} UTC` }
+// 任务是否已发射：计划时间已过，或状态已为发射后状态（与 Node half 判定一致，双保险）。
+const isLaunchedItem = (l) => {
+  const t = new Date(l.net).getTime()
+  const s = String(l.status || '').toLowerCase()
+  return (Number.isFinite(t) && t <= Date.now()) || /success|failure|in flight|partial failure/.test(s)
+}
 
 function apply(ctx = {}) {
   if (document.querySelector('[data-launch-panel]') !== null) {
@@ -196,7 +202,7 @@ function apply(ctx = {}) {
     hover.innerHTML = `
       <div class="lph-top">
         <span class="lph-status">${esc(l.statusZh)}</span>
-        <span class="lph-tag">${l.demo ? '演示数据' : (isUp ? '即将发射' : '已发射')}</span>
+        <span class="lph-tag">${l.demo ? '演示数据' : (isLaunchedItem(l) || !isUp ? '已发射' : '即将发射')}</span>
       </div>
       <div class="lph-title">${esc(l.mission)}</div>
       <div class="lph-sub">${esc(l.rocketBilingual)}${l.provider ? ' · ' + esc(l.provider) : ''}</div>
@@ -253,6 +259,11 @@ function apply(ctx = {}) {
 
   const render = () => {
     const now = Date.now()
+    // 双保险：过滤掉计划时间已过的 upcoming（Node half 已归类，防缓存窗口期残留）
+    data = { ...data, upcoming: data.upcoming.filter((l) => {
+      const t = new Date(l.net).getTime()
+      return !Number.isFinite(t) || t >= now
+    }) }
     const pastMonth = data.previous.filter((l) => {
       const t = new Date(l.net).getTime()
       return Number.isFinite(t) && t >= now - 30 * 24 * 60 * 60 * 1000
