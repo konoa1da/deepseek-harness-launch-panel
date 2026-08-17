@@ -26,6 +26,12 @@ DSH（DeepSeek Harness）Web GUI 插件：在 Web 界面右侧添加一个**可�
 launch-panel 已发布到 npm（`launch-panel@0.1.1`），**一条命令即可安装**。以下以 Windows 默认路径 `%USERPROFILE%\.dsh\profiles\web` 为例。
 
 > 前置条件：需要 `pnpm` 在 PATH 上（`npm install -g pnpm` 安装）。`dsh plugin` 命令会把参数转发给 profile 目录里的 pnpm。
+>
+
+懒人安装方式：对你的deepseek harness说：
+```sh
+帮我安装一下这个项目：https://github.com/konoa1da/deepseek-harness-launch-panel
+```
 
 **方式 A：一行命令安装（推荐）**
 
